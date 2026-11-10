@@ -1,0 +1,420 @@
+{
+  "_readme": [
+    "Maps hymn numbers to themes for the Browse by theme section.",
+    "Only confirmed thematic indexes go here - a hymn no range covers is left unthemed",
+    "rather than lumped into a placeholder bucket. Numbers are inclusive on both ends.",
+    "",
+    "To add a range: find the section in the printed hymnal, note its first and last",
+    "hymn number, and add an entry under that edition's key. Edition keys are the edition",
+    "id (CIS-ru, SDAH) or its code (HCASDA).",
+    "",
+    "A range may carry its own \"name\" to show the theme in that hymnal's own language",
+    "(\"Sifa na Kuabudu\") while keeping the shared slug, which is what makes the theme",
+    "recognisable across languages. Omit \"name\" to use the canonical English name in",
+    "the themes list below.",
+    "",
+    "After editing: `npm run load:hymns` for the CIS and SDAH editions, `npm run seed` for",
+    "HCASDA. Theme counts in the app are scoped to the language you have selected, so a",
+    "card shows only that language's hymns.",
+    "",
+    "Known gap: the CIS files carry more hymns than these indexes cover - dholuo 284-332,",
+    "abagusii 216-370 and gikuyu 231-299 are past the last range and stay unthemed until",
+    "their section boundaries are supplied."
+  ],
+  "themes": [
+    {
+      "slug": "praise",
+      "name": "Praise"
+    },
+    {
+      "slug": "grace",
+      "name": "Grace"
+    },
+    {
+      "slug": "atonement",
+      "name": "Atonement"
+    },
+    {
+      "slug": "resurrection",
+      "name": "Resurrection"
+    },
+    {
+      "slug": "sanctification",
+      "name": "Sanctification"
+    },
+    {
+      "slug": "surrender",
+      "name": "Surrender"
+    },
+    {
+      "slug": "communion",
+      "name": "Communion"
+    },
+    {
+      "slug": "worship",
+      "name": "Worship"
+    },
+    {
+      "slug": "devotion",
+      "name": "Devotion"
+    },
+    {
+      "slug": "comfort",
+      "name": "Comfort"
+    }
+  ],
+  "editions": {
+    "SDAH": [
+      {
+        "from": 1,
+        "to": 90,
+        "theme": "praise"
+      },
+      {
+        "from": 91,
+        "to": 145,
+        "theme": "grace"
+      },
+      {
+        "from": 146,
+        "to": 195,
+        "theme": "atonement"
+      },
+      {
+        "from": 196,
+        "to": 230,
+        "theme": "resurrection"
+      },
+      {
+        "from": 231,
+        "to": 310,
+        "theme": "sanctification"
+      },
+      {
+        "from": 311,
+        "to": 399,
+        "theme": "surrender"
+      },
+      {
+        "from": 400,
+        "to": 425,
+        "theme": "communion"
+      },
+      {
+        "from": 426,
+        "to": 469,
+        "theme": "worship"
+      },
+      {
+        "from": 470,
+        "to": 520,
+        "theme": "devotion"
+      },
+      {
+        "from": 521,
+        "to": 705,
+        "theme": "comfort"
+      }
+    ],
+    "CIS-swahili": [
+      {
+        "from": 1,
+        "to": 30,
+        "theme": "praise",
+        "name": "Sifa na Kuabudu (Praise)"
+      },
+      {
+        "from": 31,
+        "to": 60,
+        "theme": "grace",
+        "name": "Neema na Upendo wa Mungu (Grace & God's Love)"
+      },
+      {
+        "from": 61,
+        "to": 90,
+        "theme": "atonement",
+        "name": "Ukombozi na Msalaba (Atonement & The Cross)"
+      },
+      {
+        "from": 91,
+        "to": 105,
+        "theme": "resurrection",
+        "name": "Ufufuo na Ushindi (Resurrection & Triumph)"
+      },
+      {
+        "from": 106,
+        "to": 130,
+        "theme": "sanctification",
+        "name": "Utakaso (Sanctification & Holiness)"
+      },
+      {
+        "from": 131,
+        "to": 155,
+        "theme": "surrender",
+        "name": "Kujitoa (Surrender & Commitment)"
+      },
+      {
+        "from": 156,
+        "to": 170,
+        "theme": "communion",
+        "name": "Meza ya Bwana (Communion)"
+      },
+      {
+        "from": 171,
+        "to": 185,
+        "theme": "worship",
+        "name": "Utumishi na Kutaniko (Worship & Service)"
+      },
+      {
+        "from": 186,
+        "to": 200,
+        "theme": "devotion",
+        "name": "Maombi na Uangalizi (Devotion & Prayer)"
+      },
+      {
+        "from": 201,
+        "to": 220,
+        "theme": "comfort",
+        "name": "Faraja na Kuja Kwayake Mara ya Pili (Comfort & Second Coming)"
+      }
+    ],
+    "CIS-dholuo": [
+      {
+        "from": 1,
+        "to": 35,
+        "theme": "praise",
+        "name": "Pakuru Ruoth / Sifa (Praise)"
+      },
+      {
+        "from": 36,
+        "to": 65,
+        "theme": "grace",
+        "name": "Hera gi Ng'wono mar Nyasaye (Grace & God's Love)"
+      },
+      {
+        "from": 66,
+        "to": 90,
+        "theme": "atonement",
+        "name": "Msalaba gi Ukombozi (Atonement & The Cross)"
+      },
+      {
+        "from": 91,
+        "to": 110,
+        "theme": "resurrection",
+        "name": "Ruoth Nochier gi Ushindi (Resurrection & Triumph)"
+      },
+      {
+        "from": 111,
+        "to": 145,
+        "theme": "sanctification",
+        "name": "Utakaso gi Bedo Maler (Sanctification & Holiness)"
+      },
+      {
+        "from": 146,
+        "to": 175,
+        "theme": "surrender",
+        "name": "Kuyo gi Jonyo na Jehova (Surrender & Commitment)"
+      },
+      {
+        "from": 176,
+        "to": 195,
+        "theme": "communion",
+        "name": "Meza mar Ruoth (Communion)"
+      },
+      {
+        "from": 196,
+        "to": 220,
+        "theme": "worship",
+        "name": "Kutaniko gi Tich mar Ruoth (Worship & Service)"
+      },
+      {
+        "from": 221,
+        "to": 245,
+        "theme": "devotion",
+        "name": "Lemo gi Weche Maber (Devotion & Prayer)"
+      },
+      {
+        "from": 246,
+        "to": 283,
+        "theme": "comfort",
+        "name": "Faraja gi Biro mar Yesu Mara Ariyo (Comfort & Second Coming)"
+      }
+    ],
+    "CIS-abagusii": [
+      {
+        "from": 1,
+        "to": 30,
+        "theme": "praise",
+        "name": "Amahiga na Okweya (Praise)"
+      },
+      {
+        "from": 31,
+        "to": 55,
+        "theme": "grace",
+        "name": "Obuya bwa Nyasaye na Onyaigoro (Grace & God's Love)"
+      },
+      {
+        "from": 56,
+        "to": 85,
+        "theme": "atonement",
+        "name": "Emtalango na Omusalaba (Atonement & The Cross)"
+      },
+      {
+        "from": 86,
+        "to": 105,
+        "theme": "resurrection",
+        "name": "Okwachoka ase Riako na Obohoro (Resurrection & Triumph)"
+      },
+      {
+        "from": 106,
+        "to": 130,
+        "theme": "sanctification",
+        "name": "Obwemo na Okwera (Sanctification & Holiness)"
+      },
+      {
+        "from": 131,
+        "to": 150,
+        "theme": "surrender",
+        "name": "Okwiyamia na Oboyia bw'Omoyo (Surrender & Commitment)"
+      },
+      {
+        "from": 151,
+        "to": 165,
+        "theme": "communion",
+        "name": "Irio bia Omonene / Meza (Communion)"
+      },
+      {
+        "from": 166,
+        "to": 180,
+        "theme": "worship",
+        "name": "Okombana na Entumwa ya Nyasaye (Worship & Service)"
+      },
+      {
+        "from": 181,
+        "to": 195,
+        "theme": "devotion",
+        "name": "Okwana na Obokungu bwa Nyasaye (Devotion & Prayer)"
+      },
+      {
+        "from": 196,
+        "to": 215,
+        "theme": "comfort",
+        "name": "Oborio na Okwisia Kw'obuya kw'Omonene Omosagati (Comfort & Second Coming)"
+      }
+    ],
+    "CIS-gikuyu": [
+      {
+        "from": 1,
+        "to": 35,
+        "theme": "praise",
+        "name": "Kũgooca na Gĩthingithia (Praise)"
+      },
+      {
+        "from": 36,
+        "to": 65,
+        "theme": "grace",
+        "name": "Weega na Wendo wa Ngai (Grace & God's Love)"
+      },
+      {
+        "from": 66,
+        "to": 90,
+        "theme": "atonement",
+        "name": "Gũthonoka na mũtharaba (Atonement & The Cross)"
+      },
+      {
+        "from": 91,
+        "to": 110,
+        "theme": "resurrection",
+        "name": "Kũũka kũrĩ mwooyo na Ũhonokia (Resurrection & Triumph)"
+      },
+      {
+        "from": 111,
+        "to": 140,
+        "theme": "sanctification",
+        "name": "Gũtherio na Ũtheru (Sanctification & Holiness)"
+      },
+      {
+        "from": 141,
+        "to": 165,
+        "theme": "surrender",
+        "name": "Kũheana Mwooyo na Wĩhokeku (Surrender & Commitment)"
+      },
+      {
+        "from": 166,
+        "to": 180,
+        "theme": "communion",
+        "name": "Irio cia Gĩkundi / Meza ya Mwathani (Communion)"
+      },
+      {
+        "from": 181,
+        "to": 195,
+        "theme": "worship",
+        "name": "Gũthathaiya na Wĩra wa Mwathani (Worship & Service)"
+      },
+      {
+        "from": 196,
+        "to": 210,
+        "theme": "devotion",
+        "name": "Mahoya na Wĩhokeku (Devotion & Prayer)"
+      },
+      {
+        "from": 211,
+        "to": 230,
+        "theme": "comfort",
+        "name": "Uhooro na Kũũka kwa Kaĩri kwa Mwathani (Comfort & Second Coming)"
+      }
+    ],
+    "HCASDA": [
+      {
+        "from": 7,
+        "to": 7,
+        "theme": "grace"
+      },
+      {
+        "from": 10,
+        "to": 10,
+        "theme": "comfort"
+      },
+      {
+        "from": 18,
+        "to": 18,
+        "theme": "surrender"
+      },
+      {
+        "from": 23,
+        "to": 23,
+        "theme": "sanctification"
+      },
+      {
+        "from": 51,
+        "to": 51,
+        "theme": "praise"
+      },
+      {
+        "from": 76,
+        "to": 76,
+        "theme": "worship"
+      },
+      {
+        "from": 89,
+        "to": 89,
+        "theme": "atonement"
+      },
+      {
+        "from": 142,
+        "to": 142,
+        "theme": "resurrection"
+      },
+      {
+        "from": 215,
+        "to": 215,
+        "theme": "communion"
+      },
+      {
+        "from": 4,
+        "to": 4,
+        "theme": "devotion"
+      }
+    ]
+  }
+}

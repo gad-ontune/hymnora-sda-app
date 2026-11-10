@@ -1,0 +1,439 @@
+@import "tailwindcss";
+
+/* ── Theme tokens ─────────────────────────────────────────────────────────
+   Every colour lives as a CSS variable and is surfaced to Tailwind through
+   `@theme inline` below, so a single `data-theme` attribute on <html> repaints
+   the whole app. The attribute is always one of the *resolved* leaf themes —
+   light, warm or dark — because the choice it remembers in user_preferences
+   may be `system`, which the theme provider resolves with prefers-color-scheme
+   before writing it here.
+
+   The default (`:root`) is the warm parchment palette, unchanged from the
+   original design; it is repeated under `[data-theme="warm"]` so the explicit
+   choice and the baked-in default can never drift apart.
+
+   `--ink` is used both as body text and (via `bg-ink`) as the accent "ink"
+   surface of heroes, the sidebar and the player. Those fills must STAY dark no
+   matter how the theme flips, otherwise every dark card silently becomes a
+   light card the instant the user picks Dusk and the light text on them
+   vanishes. So `--ink-fill` is a fixed deep tone (equal to the light theme's
+   `--ink`) that the component fills bind to via `bg-ink-fill`; `--ink` alone
+   is allowed to flip between near-black on light themes and cream on Dusk. */
+:root {
+  --canvas: #f4efe4;
+  --surface: #fffdf8;
+  --surface-soft: #ece4d3;
+  --ink: #1f1e19;
+  --ink-soft: #4b473d;
+  --ink-muted: #746f63;
+  --ink-fill: #1f1e19;
+  --line: #d9cfbb;
+  --gold: #b68935;
+  --gold-light: #e4c97e;
+  --gold-soft: #f1e5c7;
+  --sage: #49624c;
+  --sage-soft: #dce5d9;
+  --terracotta: #a34a32;
+  --terracotta-soft: #f0dcd3;
+  /* The notepad's paper: a little warmer than the page behind it, so the pad
+     reads as something of the reader's own rather than another panel on the
+     site. `deep` is the title bar's paper, a shade further along the same
+     amber. */
+  --paper: #f6ebd2;
+  --paper-deep: #efe0bb;
+  --white: #ffffff;
+  --shadow-soft: 0 18px 50px rgba(50, 43, 30, 0.08);
+  /* Tighter and darker than `soft`: for things that sit just above the page,
+     like artwork and the bubble play buttons. */
+  --shadow-lift: 0 8px 20px rgba(50, 43, 30, 0.18);
+  --shadow-player: 0 -14px 40px rgba(38, 34, 25, 0.13);
+}
+
+[data-theme="warm"] {
+  --canvas: #f4efe4;
+  --surface: #fffdf8;
+  --surface-soft: #ece4d3;
+  --ink: #1f1e19;
+  --ink-soft: #4b473d;
+  --ink-muted: #746f63;
+  --ink-fill: #1f1e19;
+  --line: #d9cfbb;
+  --gold: #b68935;
+  --gold-light: #e4c97e;
+  --gold-soft: #f1e5c7;
+  --sage: #49624c;
+  --sage-soft: #dce5d9;
+  --terracotta: #a34a32;
+  --terracotta-soft: #f0dcd3;
+  --paper: #f6ebd2;
+  --paper-deep: #efe0bb;
+  --white: #ffffff;
+  --shadow-soft: 0 18px 50px rgba(50, 43, 30, 0.08);
+  --shadow-lift: 0 8px 20px rgba(50, 43, 30, 0.18);
+  --shadow-player: 0 -14px 40px rgba(38, 34, 25, 0.13);
+}
+
+/* Canvas — the cooler end of the same parchment: cream canvases, white cards,
+   near-black ink. This is the palette a bare `<html>` used to ship before the
+   choice existed. */
+[data-theme="light"] {
+  --canvas: #f3f1ea;
+  --surface: #fdfdfb;
+  --surface-soft: #e9e6dc;
+  --ink: #23211b;
+  --ink-soft: #4f4c42;
+  --ink-muted: #777268;
+  --ink-fill: #23211b;
+  --line: #d8d4c6;
+  --gold: #a88333;
+  --gold-light: #dcc27e;
+  --gold-soft: #f0e7ce;
+  --sage: #51684f;
+  --sage-soft: #e0e7dd;
+  --terracotta: #a74c33;
+  --terracotta-soft: #efded4;
+  --paper: #f4ecd4;
+  --paper-deep: #ecdbb8;
+  --white: #ffffff;
+  --shadow-soft: 0 18px 50px rgba(38, 36, 30, 0.09);
+  --shadow-lift: 0 8px 20px rgba(38, 36, 30, 0.19);
+  --shadow-player: 0 -14px 40px rgba(30, 29, 26, 0.14);
+}
+
+/* Dusk — a warm charcoal, not a cold grey, so the gold/terracotta/sage accents
+   keep their glow. Surface fills and text flip, but `--ink-fill` holds the ink
+   surface exactly where it was, and the light text on those fills comes from
+   the literal `text-*` colours on the components, which already spell out
+   white/gold-light. */
+[data-theme="dark"] {
+  --canvas: #17140e;
+  --surface: #211d15;
+  --surface-soft: #2b261c;
+  --ink: #efe9d8;
+  --ink-soft: #c8c1ac;
+  --ink-muted: #8f8872;
+  --ink-fill: #1f1e19;
+  --line: #37322550;
+  --gold: #d2a04c;
+  --gold-light: #eed8a3;
+  --gold-soft: #3a3120;
+  --sage: #86a588;
+  --sage-soft: #283329;
+  --terracotta: #d27d5e;
+  --terracotta-soft: #42281e;
+  --paper: #2c2613;
+  --paper-deep: #39301571;
+  --white: #ffffff;
+  --shadow-soft: 0 18px 50px rgba(0, 0, 0, 0.4);
+  --shadow-lift: 0 8px 20px rgba(0, 0, 0, 0.45);
+  --shadow-player: 0 -14px 40px rgba(0, 0, 0, 0.5);
+}
+
+:root {
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-soft: var(--surface-soft);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-fill: var(--ink-fill);
+  --color-line: var(--line);
+  --color-gold: var(--gold);
+  --color-gold-light: var(--gold-light);
+  --color-gold-soft: var(--gold-soft);
+  --color-sage: var(--sage);
+  --color-sage-soft: var(--sage-soft);
+  --color-terracotta: var(--terracotta);
+  --color-terracotta-soft: var(--terracotta-soft);
+  --color-paper: var(--paper);
+  --color-paper-deep: var(--paper-deep);
+  --font-sans: var(--font-dm-sans);
+  --font-display: var(--font-fraunces);
+  --font-reading: var(--font-source-serif);
+  /* Named apart from the next/font variables above, or the theme entry would
+     collide with them and resolve to itself. */
+  --font-literata: var(--font-literata-face);
+  --font-lora: var(--font-lora-face);
+  --font-signature: var(--font-signature-face);
+  --shadow-soft: var(--shadow-soft);
+  --shadow-lift: var(--shadow-lift);
+  --shadow-player: var(--shadow-player);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  min-width: 320px;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-dm-sans), sans-serif;
+  /* A gentle repaint when the user flips Canvas/Warm/Dusk/System in Settings,
+     but never touched on first paint because the theme attribute is already in
+     place before hydration. */
+  transition: background-color 220ms ease, color 220ms ease;
+}
+
+button,
+a,
+input,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+a {
+  touch-action: manipulation;
+}
+
+button:not(:disabled),
+a {
+  cursor: pointer;
+}
+
+::selection {
+  background: var(--gold-light);
+  color: var(--ink);
+}
+
+:focus-visible {
+  outline: 3px solid rgba(182, 137, 53, 0.48);
+  outline-offset: 3px;
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.soft-grid {
+  background-image:
+    linear-gradient(rgba(31, 30, 25, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(31, 30, 25, 0.035) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+[data-theme="dark"] .soft-grid {
+  background-image:
+    linear-gradient(rgba(239, 233, 216, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(239, 233, 216, 0.06) 1px, transparent 1px);
+}
+
+.range-gold {
+  appearance: none;
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--gold) 0%,
+    var(--gold) var(--range-progress, 50%),
+    rgba(116, 111, 99, 0.2) var(--range-progress, 50%),
+    rgba(116, 111, 99, 0.2) 100%
+  );
+}
+
+.range-gold::-webkit-slider-thumb {
+  appearance: none;
+  width: 13px;
+  height: 13px;
+  border: 3px solid var(--surface);
+  border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 1px 6px rgba(31, 30, 25, 0.25);
+}
+
+.range-gold::-moz-range-thumb {
+  width: 9px;
+  height: 9px;
+  border: 3px solid var(--surface);
+  border-radius: 50%;
+  background: var(--gold);
+}
+
+/* ── The mini player's progress line ─────────────────────────────────────────
+   It sits flush with the bottom edge of the bar, so the line the song is
+   counting along is the line your thumb rests on: no times, no scrub row, no
+   second row of controls above the content. The colours run gold → terracotta
+   → sage across the full width, which is why the bar's own background is a
+   whisper of the same three rather than a flat panel. */
+.player-line {
+  background:
+    linear-gradient(90deg, var(--gold) 0%, var(--terracotta) 55%, var(--sage) 100%) 0 0 /
+      var(--range-progress, 0%) 100% no-repeat,
+    linear-gradient(90deg, rgba(31, 30, 25, 0.11), rgba(31, 30, 25, 0.15));
+  transition: width 120ms linear;
+}
+
+/**
+ * The invisible control sitting on top of that line.
+ *
+ * The line is drawn with a div because a gradient across a native track is
+ * unreliable across engines, and the range input is still there underneath for
+ * dragging, focus and the arrow keys. It is 24px tall over a 4px line, because
+ * a 4px target is a target nobody can hit on a phone.
+ */
+.range-seek {
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.range-seek::-webkit-slider-runnable-track {
+  height: 24px;
+  background: transparent;
+}
+
+.range-seek::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  /* Visible only while the line is being used, so it never sits on the artwork. */
+  background: var(--white);
+  border: 2px solid var(--terracotta);
+  box-shadow: 0 1px 8px rgba(31, 30, 25, 0.35);
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.range-seek:hover::-webkit-slider-thumb,
+.range-seek:focus-visible::-webkit-slider-thumb {
+  opacity: 1;
+}
+
+.range-seek:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: -3px;
+}
+
+.range-seek::-moz-range-track {
+  height: 24px;
+  background: transparent;
+}
+
+.range-seek::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--white);
+  border: 2px solid var(--terracotta);
+  opacity: 0;
+}
+
+.range-seek:hover::-moz-range-thumb,
+.range-seek:focus-visible::-moz-range-thumb {
+  opacity: 1;
+}
+
+.warm-image {
+  filter: saturate(0.78) sepia(0.08) contrast(0.96);
+}
+
+.text-balance {
+  text-wrap: balance;
+}
+
+/* ── Bible reader ───────────────────────────────────────────────────────────
+   One column on a phone, an open book on a wide screen.
+
+   Every verse is a block with no margin, so verse 2 begins on the very next
+   line after verse 1 ends. That is the whole point of it: the previous layout
+   let a short verse share a line with the head of the next one, which on a
+   narrow screen leaves a ragged gap and reads as a hole in the text.
+
+   The desktop split uses multi-column rather than a grid. A grid has to be told
+   which verses go where, and the only thing that knows the answer is the text
+   itself — multi-column balances the flow the way the gutter of a printed Bible
+   does, and a verse is never cut across the fold unless it is longer than the
+   column. */
+.bible-verses {
+  display: block;
+}
+
+.bible-verses > .bible-verse {
+  display: block;
+  margin: 0;
+  padding: 0;
+}
+
+@media (min-width: 900px) {
+  .bible-verses {
+    column-count: 2;
+    column-gap: 2.75rem;
+    /* A faint warm grey rather than currentColor: the rule has to sit quietly
+       between two pages on the cream reader and still be visible on the dark
+       one, and currentColor would be full-strength black in the first. */
+    column-rule: 1px solid rgba(122, 114, 98, 0.32);
+  }
+
+  .bible-verses > .bible-verse {
+    break-inside: avoid;
+  }
+}
+
+/* Per-verse actions stay out of the way on a mouse, but a finger has no
+   hover, so on touch screens they are always visible rather than unreachable. */
+@media (hover: hover) and (pointer: fine) {
+  .bible-verse .verse-actions {
+    opacity: 0;
+    transition: opacity 0.15s ease;
+  }
+
+  .bible-verse:hover .verse-actions,
+  .bible-verse:focus-within .verse-actions {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bible-verse .verse-actions {
+    transition: none;
+  }
+}
+
+.fade-up {
+  animation: fade-up 0.5s ease both;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  /* Ends on `none`, not `translateY(0)`. The animation fills forwards, so a
+     residual transform here would stay on the element for the life of the
+     page — and any element with a transform becomes the containing block for
+     its `position: fixed` descendants, which quietly breaks every overlay
+     anchored to the viewport. */
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

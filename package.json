@@ -1,0 +1,22 @@
+{
+  "name": "hymnora-sda",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": ["frontend", "backend-v2"],
+  "scripts": {
+    "dev": "concurrently \"npm run dev --workspace=backend-v2\" \"npm run dev --workspace=frontend\"",
+    "dev:api": "npm run dev --workspace=backend-v2",
+    "build:frontend": "npm run build --workspace=frontend",
+    "build:backend": "npm run build --workspace=backend-v2",
+    "build:api": "npm run build --workspace=backend-v2",
+    "build": "npm run build:backend && npm run build:frontend",
+    "build:all": "npm run build:api && npm run build:frontend",
+    "start": "npm run start --workspace=backend-v2",
+    "start:api": "npm run start --workspace=backend-v2",
+    "setup:api": "npm run setup --workspace=backend-v2",
+    "lint": "npm run lint --workspace=frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}

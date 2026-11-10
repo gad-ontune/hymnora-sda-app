@@ -1,0 +1,56 @@
+{
+  "name": "hymnora-sda-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Hymnora SDA platform API \u2014 content, media, Bible, community, accounts and moderation.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "dev": "node --watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "migrate": "node src/db/migrate.ts",
+    "seed": "node src/db/seed.ts",
+    "reset": "node src/db/seed.ts --reset",
+    "load:hymns": "node src/db/loadAllHymns.ts",
+    "setup": "npm run migrate && npm run seed && npm run load:hymns && npm run load:bible",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck:all": "tsc -p tsconfig.check.json --noEmit",
+    "check": "npm run typecheck:all && npm test",
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "worker": "node --experimental-strip-types src/jobs/worker.ts",
+    "worker:once": "node --experimental-strip-types src/jobs/worker.ts --once",
+    "push:test": "node --experimental-strip-types scripts/send-test-push.ts",
+    "vapid:new": "node --experimental-strip-types scripts/generate-vapid.ts",
+    "channels:verify": "node --experimental-strip-types scripts/verify-channels.ts",
+    "channels:resolve": "node --experimental-strip-types scripts/resolve-channel.ts",
+    "channels:probe": "node --experimental-strip-types scripts/probe-channels.ts",
+    "load:bible": "node src/db/loadBibles.ts",
+    "pack:verses": "node src/db/packVerses.ts"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "compression": "^1.8.1",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.2.1",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.0.2",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/compression": "^1.8.1",
+    "@types/cookie-parser": "^1.4.9",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/multer": "^2.0.0",
+    "@types/node": "^24.10.1",
+    "typescript": "^5.9.3"
+  }
+}
