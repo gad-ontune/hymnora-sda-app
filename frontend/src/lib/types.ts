@@ -284,6 +284,8 @@ export type VideoCard = {
   channel: string;
   thumbnail: string;
   duration: string;
+  /** The raw length in seconds, for rules that must not parse the label. */
+  durationSeconds: number;
   views: number;
   likes: number;
   publishedAt: string;

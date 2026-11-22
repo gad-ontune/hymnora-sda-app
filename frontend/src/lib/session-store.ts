@@ -35,7 +35,7 @@ export type { SessionUser };
 
 export type SessionPreferences = {
   language?: string;
-  theme?: "light" | "warm" | "dark" | "system";
+  theme?: "light" | "warm" | "dark" | "sanctuary" | "garden" | "sunset" | "midnight" | "system";
   autoplay?: boolean;
   crossfade?: boolean;
   dataSaver?: boolean;
@@ -229,6 +229,11 @@ export async function signOutEverywhere(): Promise<{ ok: boolean }> {
 }
 
 export async function updatePreferences(patch: Partial<SessionPreferences>): Promise<SessionPreferences | null> {
+  // Theme and language are written from the provider on every click, and the
+  // Settings page writes the rest. For a guest the local copy is all there is —
+  // skip the call rather than firing a 401 the browser dutifully logs on each
+  // click (and on the first theme pick of every signed-out visit).
+  if (!hasSession()) return null;
   try {
     const res = await authedFetch("/api/auth/preferences", {
       method: "PATCH",
