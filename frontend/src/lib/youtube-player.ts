@@ -193,23 +193,32 @@ export function createVideoPlayer(
     onState: (state: number) => void;
     onError: (code: number) => void;
   },
-  options: { autoplay?: boolean; muted?: boolean; controls?: boolean } = {},
+  options: { autoplay?: boolean; muted?: boolean; controls?: boolean; loop?: boolean } = {},
 ): YtPlayer {
+  // YouTube only loops a single video when `loop=1` is paired with a one-item
+  // `playlist`; the flag on its own is silently ignored. Building the object
+  // conditionally also keeps `playlist=undefined` out of the player URL.
+  const playerVars: Record<string, string | number> = {
+    autoplay: options.autoplay === false ? 0 : 1,
+    controls: options.controls === false ? 0 : 1,
+    mute: options.muted === false ? 0 : 1,
+    disablekb: 0,
+    modestbranding: 1,
+    playsinline: 1,
+    rel: 0,
+    fs: 1,
+    // The feed is portrait; a 16:9 letterbox inside it wastes a third of the
+    // screen, and `playsinline` plus a fluid container handles the rest.
+    iv_load_policy: 3,
+  };
+  if (options.loop) {
+    playerVars.loop = 1;
+    playerVars.playlist = videoId;
+  }
+
   const player = new YT.Player(element, {
     videoId,
-    playerVars: {
-      autoplay: options.autoplay === false ? 0 : 1,
-      controls: options.controls === false ? 0 : 1,
-      mute: options.muted === false ? 0 : 1,
-      disablekb: 0,
-      modestbranding: 1,
-      playsinline: 1,
-      rel: 0,
-      fs: 1,
-      // The feed is portrait; a 16:9 letterbox inside it wastes a third of the
-      // screen, and `playsinline` plus a fluid container handles the rest.
-      iv_load_policy: 3,
-    },
+    playerVars,
     events: {
       // Muted on ready as well as in the player vars: the API applies `mute`
       // late enough that a scrolled-into-view reel can leak half a second of
