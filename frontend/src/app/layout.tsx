@@ -68,7 +68,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{var k="hymnora.theme",t=localStorage.getItem(k),o=["light","warm","dark","system"];t=o.indexOf(t)>-1?t:"warm";if(t==="system"){t=matchMedia&&matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}document.documentElement.dataset.theme=t;var l=localStorage.getItem("hymnora.lang"),c={English:"en",Kiswahili:"sw",French:"fr",Spanish:"es"};if(l&&c[l]){document.documentElement.lang=c[l]}}catch(e){}`,
+            __html: `try{var k="hymnora.theme",t=localStorage.getItem(k),o=["light","warm","dark","sanctuary","garden","sunset","midnight","system"];t=o.indexOf(t)>-1?t:"warm";if(t==="system"){t=matchMedia&&matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}document.documentElement.dataset.theme=t;var l=localStorage.getItem("hymnora.lang"),c={English:"en",Kiswahili:"sw",French:"fr",Spanish:"es"};if(l&&c[l]){document.documentElement.lang=c[l]}}catch(e){}`,
           }}
         />
         <HymnoraProvider>

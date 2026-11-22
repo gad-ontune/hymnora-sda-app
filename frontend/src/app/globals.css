@@ -4,9 +4,9 @@
    Every colour lives as a CSS variable and is surfaced to Tailwind through
    `@theme inline` below, so a single `data-theme` attribute on <html> repaints
    the whole app. The attribute is always one of the *resolved* leaf themes —
-   light, warm or dark — because the choice it remembers in user_preferences
-   may be `system`, which the theme provider resolves with prefers-color-scheme
-   before writing it here.
+   light, warm, dark, sanctuary, garden, sunset or midnight — because the choice
+   it remembers in user_preferences may be `system`, which the theme provider
+   resolves with prefers-color-scheme before writing it here.
 
    The default (`:root`) is the warm parchment palette, unchanged from the
    original design; it is repeated under `[data-theme="warm"]` so the explicit
@@ -100,40 +100,151 @@
   --shadow-player: 0 -14px 40px rgba(30, 29, 26, 0.14);
 }
 
-/* Dusk — a warm charcoal, not a cold grey, so the gold/terracotta/sage accents
-   keep their glow. Surface fills and text flip, but `--ink-fill` holds the ink
-   surface exactly where it was, and the light text on those fills comes from
-   the literal `text-*` colours on the components, which already spell out
-   white/gold-light. */
+/* Dusk — true black, not warm charcoal. The page is the darkest surface in the
+   app (#000), and every card sits one hairline above it; depth comes from those
+   edges and from the glow of the accents, never from lifting the canvas to grey.
+   The gold/sage/terracotta are turned up so a black screen still reads as
+   Hymnora rather than as a generic dark mode. `--ink-fill` stays a fixed dark
+   tone because the rail and the player are always dark with white text on them. */
 [data-theme="dark"] {
-  --canvas: #17140e;
-  --surface: #211d15;
-  --surface-soft: #2b261c;
-  --ink: #efe9d8;
-  --ink-soft: #c8c1ac;
-  --ink-muted: #8f8872;
-  --ink-fill: #1f1e19;
-  --line: #37322550;
-  --gold: #d2a04c;
-  --gold-light: #eed8a3;
-  --gold-soft: #3a3120;
-  --sage: #86a588;
-  --sage-soft: #283329;
-  --terracotta: #d27d5e;
-  --terracotta-soft: #42281e;
-  --paper: #2c2613;
-  --paper-deep: #39301571;
+  --canvas: #000000;
+  --surface: #0b0a09;
+  --surface-soft: #151310;
+  --ink: #f8f4ea;
+  --ink-soft: #d6cfc0;
+  --ink-muted: #9c9384;
+  --ink-fill: #050505;
+  --line: rgba(255, 255, 255, 0.14);
+  --gold: #f2be62;
+  --gold-light: #ffe6ae;
+  --gold-soft: #38280f;
+  --sage: #93d1a6;
+  --sage-soft: #132a1d;
+  --terracotta: #ff916f;
+  --terracotta-soft: #3d1d15;
+  --paper: #171208;
+  --paper-deep: #241a0b;
   --white: #ffffff;
-  --shadow-soft: 0 18px 50px rgba(0, 0, 0, 0.4);
-  --shadow-lift: 0 8px 20px rgba(0, 0, 0, 0.45);
-  --shadow-player: 0 -14px 40px rgba(0, 0, 0, 0.5);
+  --shadow-soft: 0 22px 60px rgba(0, 0, 0, 0.9), 0 0 0 1px rgba(255, 255, 255, 0.025);
+  --shadow-lift: 0 12px 30px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  --shadow-player: 0 -14px 44px rgba(0, 0, 0, 0.92);
+}
+
+/* ── Sanctuary ─────────────────────────────────────────────────────────────
+   A cool ivory page under a deep navy rail. The gold stays liturgical and the
+   sage reads as the garden outside the sanctuary; the ink fill is the one
+   surface that makes this palette recognisable at a glance. */
+[data-theme="sanctuary"] {
+  --canvas: #f2f1ea;
+  --surface: #fffdf8;
+  --surface-soft: #e8e6db;
+  --ink: #1d1c18;
+  --ink-soft: #49463d;
+  --ink-muted: #756f64;
+  --ink-fill: #1f2a44;
+  --line: #d5d1c4;
+  --gold: #b2872f;
+  --gold-light: #e6cd8d;
+  --gold-soft: #f0e6cc;
+  --sage: #4c6456;
+  --sage-soft: #dfe7df;
+  --terracotta: #a64d34;
+  --terracotta-soft: #efddd4;
+  --paper: #f5edd7;
+  --paper-deep: #ecdcba;
+  --white: #ffffff;
+  --shadow-soft: 0 18px 50px rgba(40, 44, 58, 0.09);
+  --shadow-lift: 0 8px 20px rgba(40, 44, 58, 0.2);
+  --shadow-player: 0 -14px 40px rgba(30, 34, 48, 0.16);
+}
+
+/* ── Garden ────────────────────────────────────────────────────────────────
+   The same parchment warmed toward olive: a forest rail, green-tinted cards and
+   clay accents. It is the quiet, outdoor counterpart to Sanctuary's blue. */
+[data-theme="garden"] {
+  --canvas: #f1f0e5;
+  --surface: #fdfcf5;
+  --surface-soft: #e6e6d6;
+  --ink: #1f211a;
+  --ink-soft: #494c3c;
+  --ink-muted: #73765f;
+  --ink-fill: #293a2c;
+  --line: #d5d7c5;
+  --gold: #a98a33;
+  --gold-light: #dfc886;
+  --gold-soft: #ece4c7;
+  --sage: #4d6b50;
+  --sage-soft: #dde8d8;
+  --terracotta: #a8563c;
+  --terracotta-soft: #f0ddd3;
+  --paper: #f4efd8;
+  --paper-deep: #e8dfbf;
+  --white: #ffffff;
+  --shadow-soft: 0 18px 50px rgba(38, 46, 32, 0.09);
+  --shadow-lift: 0 8px 20px rgba(38, 46, 32, 0.2);
+  --shadow-player: 0 -14px 40px rgba(30, 38, 26, 0.15);
+}
+
+/* ── Sunset ────────────────────────────────────────────────────────────────
+   Peach paper and a deep wine rail. The gold warms into amber and the
+   terracotta accent is allowed to lead, which is the point of the palette. */
+[data-theme="sunset"] {
+  --canvas: #f7efe6;
+  --surface: #fffbf6;
+  --surface-soft: #f0e2d5;
+  --ink: #241d18;
+  --ink-soft: #51453b;
+  --ink-muted: #7d6d5f;
+  --ink-fill: #43262a;
+  --line: #e0d1c2;
+  --gold: #b07a2e;
+  --gold-light: #e7c98b;
+  --gold-soft: #f3e4c8;
+  --sage: #56705a;
+  --sage-soft: #e2e9df;
+  --terracotta: #b25538;
+  --terracotta-soft: #f5ded3;
+  --paper: #f8e8d3;
+  --paper-deep: #f0d9ba;
+  --white: #ffffff;
+  --shadow-soft: 0 18px 50px rgba(60, 38, 32, 0.09);
+  --shadow-lift: 0 8px 20px rgba(60, 38, 32, 0.2);
+  --shadow-player: 0 -14px 40px rgba(50, 30, 26, 0.15);
+}
+
+/* ── Midnight ──────────────────────────────────────────────────────────────
+   The second dark leaf, cooler than Dusk: a blue-black page with a slightly
+   lighter navy rail. Gold becomes moonlight and the sage/terracotta accents
+   keep enough warmth that the screen still feels like this app at night. */
+[data-theme="midnight"] {
+  --canvas: #0d1017;
+  --surface: #161b26;
+  --surface-soft: #1f2531;
+  --ink: #ece8dc;
+  --ink-soft: #c3c0b3;
+  --ink-muted: #8b8779;
+  --ink-fill: #1b2433;
+  --line: #2b3242;
+  --gold: #d4a94e;
+  --gold-light: #f0dba7;
+  --gold-soft: #332a1b;
+  --sage: #8fb195;
+  --sage-soft: #233029;
+  --terracotta: #d98566;
+  --terracotta-soft: #3a231b;
+  --paper: #201d14;
+  --paper-deep: #2b2718;
+  --white: #ffffff;
+  --shadow-soft: 0 18px 50px rgba(0, 0, 0, 0.45);
+  --shadow-lift: 0 8px 20px rgba(0, 0, 0, 0.5);
+  --shadow-player: 0 -14px 40px rgba(0, 0, 0, 0.55);
 }
 
 :root {
   color-scheme: light;
 }
 
-[data-theme="dark"] {
+:is([data-theme="dark"], [data-theme="midnight"]) {
   color-scheme: dark;
 }
 
@@ -181,9 +292,9 @@ body {
   background: var(--canvas);
   color: var(--ink);
   font-family: var(--font-dm-sans), sans-serif;
-  /* A gentle repaint when the user flips Canvas/Warm/Dusk/System in Settings,
-     but never touched on first paint because the theme attribute is already in
-     place before hydration. */
+  /* A gentle repaint when the user flips atmosphere in Settings, but never
+     touched on first paint because the theme attribute is already in place
+     before hydration. */
   transition: background-color 220ms ease, color 220ms ease;
 }
 
@@ -222,6 +333,89 @@ a {
   display: none;
 }
 
+/* ── Reels chrome ───────────────────────────────────────────────────────────
+   TikTok-style immersion: the furniture is there when you need it and out of
+   the way when you are watching. Only the opacity/translate transition lives in
+   CSS; the `data-chrome` attribute is toggled by an interaction timer, never by
+   a render, so the fade cannot restart on every state update. */
+.reels-chrome {
+  transition: opacity 260ms ease, transform 260ms ease;
+}
+
+[data-chrome="off"] .reels-chrome {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-8px);
+}
+
+[data-chrome="off"] .reels-chrome--bottom {
+  transform: translateY(8px);
+}
+
+.reel-progress {
+  background: linear-gradient(90deg, var(--gold) 0%, var(--terracotta) 100%);
+  box-shadow: 0 0 12px rgba(242, 190, 98, 0.45);
+  transition: width 200ms linear;
+}
+
+/* A calm note inside a bottom sheet: an explanation, not another clickable row.
+   Used by the reels More/Categories sheets where a bare paragraph would look
+   like a broken menu item. */
+.sheet-note {
+  margin: 0.25rem 1rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-soft);
+  padding: 0.75rem 0.9rem;
+  color: var(--ink-muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+/* Sheet rows used to be bare HTML buttons, which is why the reels "More" menu
+   looked like a list of links from 1998. Give every row the same comfortable
+   hit area, hover and selected state, and let an optional trailing `em` carry
+   the count or the shortcut. */
+.sheet-actions > button,
+.sheet-actions > a {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.75rem;
+  border-radius: 14px;
+  padding: 0.8rem 0.9rem;
+  text-align: left;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+  transition: background-color 160ms ease, color 160ms ease;
+}
+
+.sheet-actions > button:hover,
+.sheet-actions > a:hover {
+  background: var(--surface-soft);
+}
+
+.sheet-actions > button[data-active="true"] {
+  color: var(--gold);
+  background: var(--gold-soft);
+}
+
+.sheet-actions > button > em,
+.sheet-actions > a > em {
+  margin-left: auto;
+  font-size: 11.5px;
+  font-style: normal;
+  font-weight: 700;
+  color: var(--ink-muted);
+}
+
+.sheet-actions > button > svg,
+.sheet-actions > a > svg {
+  flex-shrink: 0;
+  color: var(--ink-muted);
+}
+
 .soft-grid {
   background-image:
     linear-gradient(rgba(31, 30, 25, 0.035) 1px, transparent 1px),
@@ -229,7 +423,8 @@ a {
   background-size: 28px 28px;
 }
 
-[data-theme="dark"] .soft-grid {
+[data-theme="dark"] .soft-grid,
+[data-theme="midnight"] .soft-grid {
   background-image:
     linear-gradient(rgba(239, 233, 216, 0.06) 1px, transparent 1px),
     linear-gradient(90deg, rgba(239, 233, 216, 0.06) 1px, transparent 1px);

@@ -5,12 +5,12 @@
  * page can see at once.
  *
  * Theme ─────────────────────────────────────────────────────────────────────
- * The preference value is one of light | warm | dark | system. `system` is the
- * only value that is not a real look — it resolves to light or dark by reading
- * the OS colour scheme, and keeps listening in case the OS scheme changes while
- * the app is open. Whatever the preference is, the resolved leaf (never the
- * word "system") is written to <html data-theme>, which is what globals.css
- * keys its variable overrides on.
+ * The preference value is one of light | warm | dark | sanctuary | garden |
+ * sunset | midnight | system. `system` is the only value that is not a real
+ * look — it resolves to light or dark by reading the OS colour scheme, and
+ * keeps listening in case the OS scheme changes while the app is open. Whatever
+ * the preference is, the resolved leaf (never the word "system") is written to
+ * <html data-theme>, which is what globals.css keys its variable overrides on.
  *
  * Language ──────────────────────────────────────────────────────────────────
  * Four languages, keyed by the same display names the backend stores in
@@ -26,14 +26,24 @@
  * one.
  */
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { updatePreferences } from "@/lib/session-store";
 
 export const LANGUAGES = ["English", "Kiswahili", "French", "Spanish"] as const;
 export type Language = (typeof LANGUAGES)[number];
 
-export type ThemeChoice = "light" | "warm" | "dark" | "system";
-export type ResolvedTheme = "light" | "warm" | "dark";
+export const THEME_CHOICES = [
+  "light",
+  "warm",
+  "dark",
+  "sanctuary",
+  "garden",
+  "sunset",
+  "midnight",
+  "system",
+] as const;
+export type ThemeChoice = (typeof THEME_CHOICES)[number];
+export type ResolvedTheme = Exclude<ThemeChoice, "system">;
 
 const THEME_KEY = "hymnora.theme";
 const LANG_KEY = "hymnora.lang";
@@ -122,6 +132,10 @@ const hebrew = {
   "settings.themeCanvas": "Canvas",
   "settings.themeWarm": "Warm",
   "settings.themeDusk": "Dusk",
+  "settings.themeSanctuary": "Sanctuary",
+  "settings.themeGarden": "Garden",
+  "settings.themeSunset": "Sunset",
+  "settings.themeMidnight": "Midnight",
 } as const;
 
 export type MessageKey = keyof typeof hebrew;
@@ -195,6 +209,10 @@ const swahili: Record<MessageKey, string> = {
   "settings.themeCanvas": "Canvas",
   "settings.themeWarm": "Joto",
   "settings.themeDusk": "Jioni",
+  "settings.themeSanctuary": "Patakatifu",
+  "settings.themeGarden": "Bustani",
+  "settings.themeSunset": "Machweo",
+  "settings.themeMidnight": "Usiku wa manane",
 };
 
 const french: Record<MessageKey, string> = {
@@ -266,6 +284,10 @@ const french: Record<MessageKey, string> = {
   "settings.themeCanvas": "Toile",
   "settings.themeWarm": "Chaleureux",
   "settings.themeDusk": "Crépuscule",
+  "settings.themeSanctuary": "Sanctuaire",
+  "settings.themeGarden": "Jardin",
+  "settings.themeSunset": "Coucher de soleil",
+  "settings.themeMidnight": "Minuit",
 };
 
 const spanish: Record<MessageKey, string> = {
@@ -337,6 +359,10 @@ const spanish: Record<MessageKey, string> = {
   "settings.themeCanvas": "Lienzo",
   "settings.themeWarm": "Cálido",
   "settings.themeDusk": "Ocaso",
+  "settings.themeSanctuary": "Santuario",
+  "settings.themeGarden": "Jardín",
+  "settings.themeSunset": "Atardecer",
+  "settings.themeMidnight": "Medianoche",
 };
 
 export const DICTIONARIES: Record<Language, Record<MessageKey, string>> = {
@@ -379,6 +405,86 @@ function applyTheme(choice: ThemeChoice): void {
   document.documentElement.dataset.theme = resolveTheme(choice, systemPrefersDark());
 }
 
+/**
+ * The dress as an external store, built the same way as the session store.
+ *
+ * `useSyncExternalStore` is the one hook that can serve the server a different
+ * answer from the browser without a hydration mismatch: SSR and the hydration
+ * pass take `getServerSnapshot` (the platform defaults), then once the tree is
+ * live React switches to the localStorage-backed snapshot. That is why the
+ * Settings swatches agree with the server HTML on first paint and settle on the
+ * visitor's saved choice a moment later — with no setState in an effect, and no
+ * visible flash because the inline head script painted that saved choice before
+ * hydration began.
+ */
+type Dress = { language: Language; theme: ThemeChoice };
+const DEFAULT_DRESS: Dress = { language: "English", theme: "warm" };
+let dressSnapshot: Dress = DEFAULT_DRESS;
+let dressLoaded = false;
+const dressListeners = new Set<() => void>();
+
+function dressFromStorage(): Dress {
+  const storedTheme = readStorage(THEME_KEY);
+  const storedLanguage = readStorage(LANG_KEY);
+  return {
+    theme: (THEME_CHOICES as readonly string[]).includes(storedTheme ?? "") ? (storedTheme as ThemeChoice) : "warm",
+    language: (LANGUAGES as readonly string[]).includes(storedLanguage ?? "") ? (storedLanguage as Language) : "English",
+  };
+}
+
+function getDressSnapshot(): Dress {
+  if (!dressLoaded) {
+    dressLoaded = true;
+    dressSnapshot = dressFromStorage();
+  }
+  return dressSnapshot;
+}
+
+function getDressServerSnapshot(): Dress {
+  return DEFAULT_DRESS;
+}
+
+function subscribeDress(listener: () => void): () => void {
+  dressListeners.add(listener);
+  return () => {
+    dressListeners.delete(listener);
+  };
+}
+
+function writeDress(patch: Partial<Dress>): void {
+  dressSnapshot = { ...dressSnapshot, ...patch };
+  if (patch.theme !== undefined) writeStorage(THEME_KEY, patch.theme);
+  if (patch.language !== undefined) writeStorage(LANG_KEY, patch.language);
+  dressListeners.forEach((listener) => listener());
+}
+
+/** The OS scheme is a second external store: it can change while the app is open. */
+let osDarkSnapshot: boolean | null = null;
+const osDarkListeners = new Set<() => void>();
+
+function getOsDarkSnapshot(): boolean {
+  if (osDarkSnapshot === null) osDarkSnapshot = systemPrefersDark();
+  return osDarkSnapshot;
+}
+
+function getOsDarkServerSnapshot(): boolean {
+  return false;
+}
+
+function subscribeOsDark(listener: () => void): () => void {
+  osDarkListeners.add(listener);
+  return () => {
+    osDarkListeners.delete(listener);
+  };
+}
+
+function refreshOsDark(): void {
+  const next = systemPrefersDark();
+  if (next === osDarkSnapshot) return;
+  osDarkSnapshot = next;
+  osDarkListeners.forEach((listener) => listener());
+}
+
 type AppCharmContextValue = {
   language: Language;
   setLanguage: (language: Language) => void;
@@ -392,41 +498,41 @@ type AppCharmContextValue = {
 const AppCharmContext = createContext<AppCharmContextValue | null>(null);
 
 export function AppCharmProvider({ children }: { children: React.ReactNode }) {
-  const [language, setLanguageState] = useState<Language>(() => {
-    const stored = readStorage(LANG_KEY);
-    return (LANGUAGES as readonly string[]).includes(stored ?? "") ? (stored as Language) : "English";
-  });
-  const [theme, setThemeState] = useState<ThemeChoice>(() => {
-    const stored = readStorage(THEME_KEY);
-    const choices: readonly string[] = ["light", "warm", "dark", "system"];
-    // The platform default is warm, matching the backend's column default.
-    return choices.includes(stored ?? "") ? (stored as ThemeChoice) : "warm";
-  });
-  const [osDark, setOsDark] = useState(systemPrefersDark);
+  const dress = useSyncExternalStore(subscribeDress, getDressSnapshot, getDressServerSnapshot);
+  const osDark = useSyncExternalStore(subscribeOsDark, getOsDarkSnapshot, getOsDarkServerSnapshot);
+  const { language, theme } = dress;
+  const mounted = useRef(false);
 
-  // A cold paint could still come with "system" in the attribute if the inline
-  // head script did not run; this first-pass apply resolves it like everything
-  // else, so the two always agree.
+  // Re-apply on later changes only. On the very first mount the head script has
+  // already resolved "system" and set data-theme correctly; painting the default
+  // here would overwrite a returning visitor's stored look for a frame.
   useEffect(() => {
+    if (!mounted.current) return;
     applyTheme(theme);
   }, [theme, osDark]);
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
     const query = window.matchMedia("(prefers-color-scheme: dark)");
-    const listener = (event: MediaQueryListEvent) => setOsDark(event.matches);
+    const listener = () => refreshOsDark();
     query.addEventListener("change", listener);
     return () => query.removeEventListener("change", listener);
   }, []);
 
   useEffect(() => {
+    if (!mounted.current) return;
     document.documentElement.lang = LANGUAGE_CODES[language];
   }, [language]);
 
+  // Declared last so the effects above see `false` on the first mount (the head
+  // script's paint stands) and `true` on the re-render that loads the stored copy.
+  useEffect(() => {
+    mounted.current = true;
+  }, []);
+
   const setTheme = useCallback(
     (next: ThemeChoice) => {
-      setThemeState(next);
-      writeStorage(THEME_KEY, next);
+      writeDress({ theme: next });
       applyTheme(next);
       // Fire-and-forget: the setting applies on this browser regardless, and
       // the account copy is best effort for whoever is signed in.
@@ -437,8 +543,7 @@ export function AppCharmProvider({ children }: { children: React.ReactNode }) {
 
   const setLanguage = useCallback(
     (next: Language) => {
-      setLanguageState(next);
-      writeStorage(LANG_KEY, next);
+      writeDress({ language: next });
       document.documentElement.lang = LANGUAGE_CODES[next];
       void updatePreferences({ language: next });
     },
