@@ -4,8 +4,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
-  ArrowLeft, Bookmark, Check, Compass, Heart, Home, MessageCircle, MoreVertical,
-  Pause, Play, Plus, Send, Share2, Sparkles, Users, Volume2, VolumeX, X,
+  ArrowLeft, Bookmark, Check, Compass, EyeOff, Film, Flag, Heart, Home, MessageCircle,
+  MoreVertical, Pause, Play, Plus, Send, Share2, Sparkles, UserPlus, Users, Volume2,
+  VolumeX, X,
 } from "lucide-react";
 import {
   getComments, getFollows, getReel, getReels, hideReel, postComment, toggleCommentLike,
@@ -32,6 +33,18 @@ import type { Comment, FollowsSummary, Reel, ReelFacets, ReelFeedName, ReelPage 
  */
 
 type Tab = "following" | "for-you" | "categories";
+
+/** The Reel Studio's draft key. Kept in sync with reel-create-experience.tsx. */
+const LOCAL_DRAFTS_KEY = "hymnora.reelStudio.drafts.v1";
+
+type LocalDraft = {
+  kind?: string;
+  videoId?: string | null;
+  title?: string;
+  createdAt?: string;
+  start?: number;
+  end?: number;
+};
 
 type Props = {
   initialPage: ReelPage;
@@ -77,6 +90,62 @@ function relativeTime(iso: string): string {
   return new Date(then).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+/**
+ * A YouTube reel saved in the local Reel Studio has no backend row, so a shared
+ * `/reels?reel=<id>` link would otherwise land on a "not available" toast. Read
+ * the draft back and give the player a real reel to show. Local entries are
+ * visibly labelled as yours and never sent to the API.
+ */
+function readLocalReel(videoId: string): Reel | null {
+  if (typeof window === "undefined" || !/^[\w-]{11}$/.test(videoId)) return null;
+  try {
+    const raw = window.localStorage.getItem(LOCAL_DRAFTS_KEY);
+    if (!raw) return null;
+    const drafts: unknown = JSON.parse(raw);
+    if (!Array.isArray(drafts)) return null;
+    const draft = drafts.find(
+      (item): item is LocalDraft =>
+        typeof item === "object" &&
+        item !== null &&
+        (item as LocalDraft).kind === "youtube" &&
+        (item as LocalDraft).videoId === videoId,
+    );
+    if (!draft) return null;
+    const seconds = Math.max(0, Math.round((draft.end ?? 0) - (draft.start ?? 0)));
+    const duration = seconds > 0 ? `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}` : "";
+    return {
+      id: `yt-${videoId}`,
+      videoId,
+      title: draft.title?.trim() || "Your saved reel",
+      channel: "Your studio",
+      thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+      duration,
+      durationSeconds: seconds,
+      views: 0,
+      likes: 0,
+      publishedAt: draft.createdAt ?? new Date().toISOString(),
+      language: "en",
+      region: "local",
+      regionLabel: "Saved on this device",
+      category: "worship",
+      isLive: false,
+      watchUrl: `https://www.youtube.com/watch?v=${videoId}`,
+      reelCategory: "for-you",
+      reelCategoryLabel: "From your studio",
+      channelId: "local-studio",
+      channelFollowers: 0,
+      isFollowingChannel: false,
+      commentCount: 0,
+      likeCount: 0,
+      liked: false,
+      shareCount: 0,
+      weight: 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function ReelsExperience({ initialPage, facets, initialReelId = null }: Props) {
   const router = useRouter();
   const signedIn = useSyncExternalStore(subscribeToSession, readSession, readSessionOnServer);
@@ -86,8 +155,9 @@ export function ReelsExperience({ initialPage, facets, initialReelId = null }: P
   const [page, setPage] = useState<ReelPage>(initialPage);
   const [active, setActive] = useState(0);
   const [chrome, setChrome] = useState(true);
-  const [sheet, setSheet] = useState<null | "comments" | "more" | "categories" | "create">(null);
+  const [sheet, setSheet] = useState<null | "comments" | "more" | "categories">(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [progress, setProgress] = useState(0);
   const [muted, setMuted] = useState(true);
   const [playing, setPlaying] = useState(false);
   const [paused, setPaused] = useState(false);
@@ -99,6 +169,19 @@ export function ReelsExperience({ initialPage, facets, initialReelId = null }: P
   const playerRef = useRef<YtPlayer | null>(null);
   const itemRefs = useRef<(HTMLElement | null)[]>([]);
   const chromeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Reels saved in this browser, kept across feed refetches. */
+  const localReelsRef = useRef<Reel[]>([]);
+  const mutedRef = useRef(true);
+
+  useEffect(() => {
+    mutedRef.current = muted;
+  }, [muted]);
+
+  /** Prepends locally saved reels without ever duplicating a feed item. */
+  const withLocalReels = useCallback((items: Reel[]) => {
+    const local = localReelsRef.current.filter((saved) => !items.some((item) => item.videoId === saved.videoId));
+    return local.length ? [...local, ...items] : items;
+  }, []);
 
   const reels = page.items;
   const reel = reels[active] ?? null;
@@ -108,14 +191,14 @@ export function ReelsExperience({ initialPage, facets, initialReelId = null }: P
     async (nextFeed: ReelFeedName, nextCategory: string | null) => {
       try {
         const result = await getReels({ feed: nextFeed, category: nextCategory ?? undefined, limit: 10 });
-        setPage(result);
+        setPage({ ...result, items: withLocalReels(result.items) });
         setActive(0);
         scrollerRef.current?.scrollTo({ top: 0 });
       } catch {
         setToast("Could not load the feed");
       }
     },
-    [],
+    [withLocalReels],
   );
 
   useEffect(() => {
@@ -132,6 +215,7 @@ export function ReelsExperience({ initialPage, facets, initialReelId = null }: P
 
   useEffect(() => {
     if (!initialReelId) return;
+    let cancelled = false;
     const inFeed = initialPage.items.findIndex((item) => item.videoId === initialReelId);
     if (inFeed >= 0) {
       // Already in the first page: scroll the stack to it and let the observer
@@ -139,7 +223,24 @@ export function ReelsExperience({ initialPage, facets, initialReelId = null }: P
       scrollerRef.current?.scrollTo({ top: inFeed * (scrollerRef.current?.clientHeight ?? 0) });
       return;
     }
-    let cancelled = false;
+
+    // A reel saved from the local Studio has no server row. Show it before
+    // trying the API, so a shared link to one does not end in an error toast.
+    const local = readLocalReel(initialReelId);
+    if (local) {
+      localReelsRef.current = [local, ...localReelsRef.current.filter((item) => item.videoId !== local.videoId)];
+      // A microtask keeps the client-only localStorage read out of the render
+      // path (and out of the SSR snapshot) while still landing before paint.
+      void Promise.resolve().then(() => {
+        if (cancelled) return;
+        setPage((current) => ({ ...current, items: withLocalReels(current.items) }));
+        scrollerRef.current?.scrollTo({ top: 0 });
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+
     getReel(initialReelId)
       .then(({ reel }) => {
         if (cancelled) return;
@@ -151,7 +252,7 @@ export function ReelsExperience({ initialPage, facets, initialReelId = null }: P
     return () => {
       cancelled = true;
     };
-  }, [initialReelId, initialPage.items]);
+  }, [initialReelId, initialPage.items, withLocalReels]);
 
   /**
    * The first page came from the server, which could not see the token, so its
@@ -168,8 +269,9 @@ export function ReelsExperience({ initialPage, facets, initialReelId = null }: P
         if (cancelled) return;
         setPage((current) => ({
           ...next,
-          // Keep what is on screen if the refetch came back a different length.
-          items: next.items.length > 0 ? next.items : current.items,
+          // Keep what is on screen if the refetch came back a different length,
+          // and keep locally saved reels the server knows nothing about.
+          items: withLocalReels(next.items.length > 0 ? next.items : current.items),
         }));
       })
       .catch(() => {
@@ -216,41 +318,79 @@ export function ReelsExperience({ initialPage, facets, initialReelId = null }: P
   }, [reels.length, showChrome]);
 
   // ── The player, for whichever reel is current ──────────────────────────────
+  const activeVideoId = reel?.videoId ?? null;
+
   useEffect(() => {
-    if (!reel) return;
+    if (!activeVideoId) return;
     const node = itemRefs.current[active];
     if (!node) return;
+    const host = node.querySelector<HTMLElement>("[data-player]");
+    if (!host) return;
     let cancelled = false;
     setPlaying(false);
+    setProgress(0);
+
+    // `YT.Player` does not render inside the element it is handed: it replaces
+    // that element with its own iframe. So the element must be one React does
+    // not own, or React's next update tries to insert or remove children of a
+    // node that is no longer in the document. The host stays React's; the
+    // mount node inside it is ours, and the iframe replaces only that.
+    const mount = document.createElement("div");
+    host.replaceChildren(mount);
 
     loadYouTubeApi()
       .then((YT) => {
-        if (cancelled) return;
+        if (cancelled || !mount.isConnected) return;
         // The container is replaced per reel, so a stale player bound to a
         // detached node would keep playing into nothing.
-        playerRef.current?.destroy();
-        const host = node.querySelector<HTMLElement>("[data-player]");
-        if (!host) return;
+        try {
+          playerRef.current?.destroy();
+        } catch {
+          /* Already destroyed by the previous reel's cleanup. */
+        }
         createVideoPlayer(
           YT,
-          host,
-          reel.videoId,
+          mount,
+          activeVideoId,
           {
             onReady: (instance) => {
               if (cancelled) return;
               playerRef.current = instance;
+              // Muting is per player, but the reader's choice is not: carry it
+              // over when they scroll from one reel to the next.
+              if (!mutedRef.current) {
+                instance.setVolume(0.85);
+                if (typeof instance.unMute === "function") instance.unMute();
+              }
               setPlaying(true);
             },
             onState: (state) => {
               if (cancelled) return;
               setPlaying(state === YT_STATE.PLAYING);
-              if (state === YT_STATE.ENDED) setPaused(true);
+              if (state === YT_STATE.ENDED) {
+                // `loop=1` plus the one-item playlist normally handles this.
+                // The rewind is the belt-and-braces path for embeds that still
+                // report ENDED: a reel must never stop and wait for a tap.
+                setProgress(0);
+                setPaused(false);
+                window.setTimeout(() => {
+                  if (cancelled) return;
+                  const instance = playerRef.current;
+                  if (!instance) return;
+                  try {
+                    instance.seekTo(0, true);
+                    instance.playVideo();
+                  } catch {
+                    /* The loop var has already taken over. */
+                  }
+                }, 120);
+              }
             },
             onError: (code) => {
               if (!cancelled) setError(playerErrorMessage(code));
             },
           },
-          { autoplay: true, muted: true },
+          { autoplay: true, muted: true, loop: true },
         );
       })
       .catch(() => {
@@ -265,8 +405,9 @@ export function ReelsExperience({ initialPage, facets, initialReelId = null }: P
         player.pauseVideo();
         player.destroy();
       }
+      host.replaceChildren();
     };
-  }, [active, reel?.videoId, reel]);
+  }, [active, activeVideoId]);
 
   const toggleSound = useCallback(() => {
     const player = playerRef.current;
@@ -293,6 +434,48 @@ export function ReelsExperience({ initialPage, facets, initialReelId = null }: P
       setPaused(true);
     }
   }, [paused]);
+
+  // The IFrame API has no timeupdate event, so the progress line is polled. It
+  // only ticks while a reel is actually playing — a paused 4 Hz poll is battery
+  // drain for a line that is not moving.
+  useEffect(() => {
+    if (!playing) return;
+    const timer = window.setInterval(() => {
+      const player = playerRef.current;
+      if (!player) return;
+      const current = player.getCurrentTime();
+      const total = player.getDuration();
+      if (!Number.isFinite(current) || !Number.isFinite(total) || total <= 0) return;
+      setProgress(Math.min(1, Math.max(0, current / total)));
+    }, 250);
+    return () => window.clearInterval(timer);
+  }, [playing, activeVideoId]);
+
+  // Keyboard parity with the feed: up/down move between reels, space pauses,
+  // and M toggles sound. All of them bring the chrome back for a moment.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (sheet) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const next = Math.min(reels.length - 1, Math.max(0, active + (event.key === "ArrowDown" ? 1 : -1)));
+        if (next === active) return;
+        itemRefs.current[next]?.scrollIntoView({ behavior: "smooth", block: "start" });
+        showChrome();
+      } else if (event.key === " ") {
+        event.preventDefault();
+        togglePlayback();
+        showChrome();
+      } else if (event.key.toLowerCase() === "m") {
+        toggleSound();
+        showChrome();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [active, reels.length, sheet, showChrome, togglePlayback, toggleSound]);
 
   // On a new reel, the chrome gets its own run. The timer is all this effect
   // sets: the state change happens when it fires, and `showChrome` — which does
@@ -421,7 +604,7 @@ export function ReelsExperience({ initialPage, facets, initialReelId = null }: P
       className="fixed inset-0 z-30 flex flex-col bg-ink-fill text-white"
       data-chrome={chrome ? "on" : "off"}
     >
-      <header className="flex h-14 shrink-0 items-center gap-3 px-3 sm:h-16 sm:px-5">
+      <header className="reels-chrome flex h-14 shrink-0 items-center gap-3 bg-gradient-to-b from-black/70 to-transparent px-3 sm:h-16 sm:px-5">
         <Link
           href="/news"
           className="flex shrink-0 items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-[12px] font-semibold text-white/85 transition hover:bg-white/20"
@@ -485,7 +668,7 @@ export function ReelsExperience({ initialPage, facets, initialReelId = null }: P
             data-active={index === active}
             onClick={showChrome}
           >
-            <div className="absolute inset-0 grid place-items-center [&>iframe]:absolute [&>iframe]:inset-0 [&>iframe]:h-full [&>iframe]:w-full" data-player="">
+            <div className="absolute inset-0">
               {/* The thumbnail is the poster frame and the fallback: YouTube paints
                   its own, and this is what is there before it does. */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -495,18 +678,28 @@ export function ReelsExperience({ initialPage, facets, initialReelId = null }: P
                 className="absolute inset-0 size-full object-cover"
                 loading={index < 2 ? "eager" : "lazy"}
               />
+              {/* Empty on purpose. The player's mount node is created in the
+                  effect above, because the IFrame API replaces whatever element
+                  it is given — React must not own anything inside this host. */}
+              <div
+                className="absolute inset-0 [&>iframe]:absolute [&>iframe]:inset-0 [&>iframe]:h-full [&>iframe]:w-full"
+                data-player=""
+              />
             </div>
 
             {error && index === active ? (
-              <Link
-              className="absolute inset-0 z-10 grid place-content-center gap-2 bg-ink-fill/85 px-6 text-center text-[13px] text-white/80"
-              href={`https://www.youtube.com/watch?v=${item.videoId}`}
-            >
-              {error} Watch on YouTube
-            </Link>
+              <div className="absolute inset-0 z-10 grid place-content-center gap-3 bg-ink-fill/85 px-6 text-center">
+                <p className="text-[13px] leading-6 text-white/80">{error}</p>
+                <Link
+                  href="/videos"
+                  className="mx-auto rounded-full border border-white/30 px-4 py-2 text-[12px] font-bold text-white transition hover:bg-white/10"
+                >
+                  Browse other videos
+                </Link>
+              </div>
             ) : null}
 
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/85 via-black/40 to-transparent pb-28 pt-24 transition-opacity duration-500 sm:pb-24">
+            <div className="reels-chrome pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/85 via-black/40 to-transparent pb-28 pt-24 transition-opacity duration-500 sm:pb-24">
               <div className="pointer-events-auto px-4 sm:px-5">
                 <Link
                   href={`/news?q=${encodeURIComponent(item.channel)}`}
@@ -542,7 +735,7 @@ export function ReelsExperience({ initialPage, facets, initialReelId = null }: P
               </div>
             </div>
 
-            <div className="absolute bottom-24 right-3 z-20 flex flex-col items-center gap-5 sm:bottom-20 sm:right-5">
+            <div className="reels-chrome absolute bottom-24 right-3 z-20 flex flex-col items-center gap-5 sm:bottom-20 sm:right-5">
               <button
                 type="button"
                 className="flex flex-col items-center gap-1 text-[11px] font-semibold text-white/85 transition data-active:text-terracotta"
@@ -615,6 +808,19 @@ export function ReelsExperience({ initialPage, facets, initialReelId = null }: P
               </div>
             ) : null}
 
+            {index === active ? (
+              <div
+                className="absolute inset-x-0 bottom-0 z-20 h-[3px] bg-white/20"
+                role="progressbar"
+                aria-label="Reel progress"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(progress * 100)}
+              >
+                <div className="reel-progress h-full" style={{ width: `${Math.round(progress * 100)}%` }} />
+              </div>
+            ) : null}
+
             {!playing && index === active && !error ? (
               <p className="pointer-events-none absolute left-1/2 top-4 z-10 -translate-x-1/2 rounded-full bg-ink-fill/60 px-3 py-1 text-[11px] text-white/75 backdrop-blur" role="status">
                 Loading the video…
@@ -625,23 +831,23 @@ export function ReelsExperience({ initialPage, facets, initialReelId = null }: P
       </div>
 
       <nav
-        className="grid h-[68px] shrink-0 grid-cols-4 border-t border-white/10 bg-ink-fill/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl"
+        className="reels-chrome reels-chrome--bottom grid h-[68px] shrink-0 grid-cols-4 border-t border-white/10 bg-ink-fill/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl"
         aria-label="Reels sections"
       >
-        <button type="button" onClick={goHome} className="flex flex-col items-center justify-center gap-1 text-[10px] font-semibold text-white/60">
+        <button type="button" onClick={goHome} className="flex flex-col items-center justify-center gap-1 text-[10px] font-semibold text-white/60 transition hover:text-white">
           <Home size={19} aria-hidden />
           Home
         </button>
-        <Link href="/news?q=church" className="flex flex-col items-center justify-center gap-1 text-[10px] font-semibold text-white/60">
+        <Link href="/reels/friends" className="flex flex-col items-center justify-center gap-1 text-[10px] font-semibold text-white/60 transition hover:text-white">
           <Users size={19} aria-hidden />
           Friends
         </Link>
-        <button type="button" onClick={() => setSheet("create")} className="flex flex-col items-center justify-center gap-1 text-[10px] font-semibold text-white/60">
-          <span className="grid size-8 place-items-center rounded-full bg-gold text-ink">
+        <Link href="/reels/create" className="flex flex-col items-center justify-center gap-1 text-[10px] font-semibold text-white/60 transition hover:text-white">
+          <span className="grid size-8 place-items-center rounded-full bg-gold text-ink shadow-lift">
             <Plus size={18} aria-hidden />
           </span>
           Create
-        </button>
+        </Link>
         <Link href="/churches" className="relative flex flex-col items-center justify-center gap-1 text-[10px] font-semibold text-white/60">
           <Bookmark size={19} aria-hidden />
           Churches
@@ -658,54 +864,77 @@ export function ReelsExperience({ initialPage, facets, initialReelId = null }: P
       ) : null}
 
       {sheet === "more" && reel ? (
-        <Sheet title="More" onClose={() => setSheet(null)}>
-          <button type="button" onClick={onShare}>
-            <Share2 size={18} aria-hidden /> Send to a friend
-          </button>
-          <button type="button" onClick={onFollow}>
-            {following.has(`creator:${reel.channelId}`) ? "Unfollow this channel" : "Follow this channel"}
-          </button>
-          <button type="button" onClick={onNotInterested}>
-            <X size={18} aria-hidden /> Not interested
-          </button>
-          <button type="button" onClick={onReport}>
-            Report this reel
-          </button>
-          <Link href={`https://www.youtube.com/watch?v=${reel.videoId}`}>Watch on YouTube</Link>
+        <Sheet title="More options" onClose={() => setSheet(null)}>
+          <div className="mx-3 mt-2 flex items-center gap-3 rounded-2xl border border-line bg-surface-soft p-3">
+            {/* eslint-disable-next-line @next/next/no-img-element -- a remote
+                YouTube thumbnail on an unknown host; next/image cannot load it. */}
+            <img src={reel.thumbnail} alt="" className="size-14 shrink-0 rounded-xl object-cover" />
+            <div className="min-w-0">
+              <p className="truncate text-[13px] font-semibold text-ink">{reel.title}</p>
+              <p className="mt-0.5 truncate text-[11.5px] text-ink-muted">
+                {reel.channel} · {reel.reelCategoryLabel}
+              </p>
+            </div>
+            <span className="ml-auto shrink-0 rounded-full bg-gold-soft px-2 py-1 text-[10px] font-bold text-gold">
+              {reel.duration}
+            </span>
+          </div>
+
+          <SheetSection label="This reel">
+            <button type="button" onClick={onShare}>
+              <Share2 size={18} aria-hidden /> Send to a friend
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSheet(null);
+                router.push(`/videos/${reel.videoId}`);
+              }}
+            >
+              <Film size={18} aria-hidden /> Open in the video player
+            </button>
+            <button type="button" onClick={onFollow}>
+              {following.has(`creator:${reel.channelId}`) ? <Check size={18} aria-hidden /> : <UserPlus size={18} aria-hidden />}
+              {following.has(`creator:${reel.channelId}`) ? "Following this channel" : "Follow this channel"}
+            </button>
+          </SheetSection>
+
+          <SheetSection label="Keep exploring">
+            <button type="button" onClick={() => setSheet("categories")}>
+              <Compass size={18} aria-hidden /> Browse categories
+            </button>
+            <Link href="/reels/friends">
+              <Users size={18} aria-hidden /> Find friends in reels
+            </Link>
+            <Link href="/reels/create">
+              <Plus size={18} aria-hidden /> Create a reel
+            </Link>
+          </SheetSection>
+
+          <SheetSection label="Feedback">
+            <button type="button" onClick={onNotInterested}>
+              <EyeOff size={18} aria-hidden /> Not interested
+            </button>
+            <button type="button" onClick={onReport}>
+              <Flag size={18} aria-hidden /> Report this reel
+            </button>
+          </SheetSection>
+          <p className="sheet-note">Everything here stays inside Hymnora — no detour to another app.</p>
         </Sheet>
       ) : null}
 
       {sheet === "categories" ? (
         <Sheet title="Categories" onClose={() => setSheet(null)}>
-          <p className="sheet-note">Every shelf with reels on it. Empty shelves are not offered.</p>
-          {facets?.categories.map((entry) => (
-            <button key={entry.id} type="button" data-active={category === entry.id} onClick={() => chooseCategory(entry.id)}>
-              <span>{entry.label}</span>
-              <em>{entry.count}</em>
-            </button>
-          ))}
+          <p className="sheet-note">Every shelf with reels of four minutes or less. Empty shelves are not offered.</p>
+          <div className="sheet-actions px-2">
+            {facets?.categories.map((entry) => (
+              <button key={entry.id} type="button" data-active={category === entry.id} onClick={() => chooseCategory(entry.id)}>
+                {entry.label}
+                <em>{entry.count}</em>
+              </button>
+            ))}
+          </div>
           {facets?.categories.length === 0 ? <p className="sheet-note">No shelves yet.</p> : null}
-        </Sheet>
-      ) : null}
-
-      {sheet === "create" ? (
-        <Sheet title="Create" onClose={() => setSheet(null)}>
-          <p className="sheet-note">
-            Publishing a reel is not open in this build. What you can do from here is comment on a reel, share
-            one, and follow the channels you want more of.
-          </p>
-          <button
-            type="button"
-            onClick={() => {
-              setSheet("comments");
-            }}
-          >
-            <MessageCircle size={18} aria-hidden /> Comment on this reel
-          </button>
-          <button type="button" onClick={onShare}>
-            <Share2 size={18} aria-hidden /> Share this reel
-          </button>
-          <Link href="/news">Back to the newsroom</Link>
         </Sheet>
       ) : null}
 
@@ -905,22 +1134,48 @@ function Sheet({
   onClose: () => void;
   children: React.ReactNode;
 }) {
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   return (
     <div
       className="absolute inset-0 z-40 flex items-end justify-center bg-ink-fill/60 backdrop-blur-sm sm:items-center"
       role="dialog"
       aria-modal="true"
       aria-label={title}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
     >
       <div className="fade-up max-h-[82vh] w-full max-w-[520px] overflow-y-auto rounded-t-[26px] bg-surface pb-[calc(env(safe-area-inset-bottom)+12px)] text-ink shadow-lift sm:rounded-[26px] sm:pb-3">
         <header className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-surface px-5 py-4">
           <h2 className="font-display text-[17px] font-semibold">{title}</h2>
-          <button type="button" onClick={onClose} aria-label="Close">
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="grid size-8 place-items-center rounded-full text-ink-muted transition hover:bg-surface-soft hover:text-ink"
+          >
             <X size={18} aria-hidden />
           </button>
         </header>
-        <div className="space-y-1 p-2">{children}</div>
+        <div className="space-y-1 px-2 pb-2 pt-2">{children}</div>
       </div>
     </div>
+  );
+}
+
+/** A titled group of sheet rows, so a long menu reads as sections, not a list. */
+function SheetSection({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <section className="mt-4">
+      <h3 className="px-5 pb-1 text-[10px] font-bold uppercase tracking-[0.2em] text-ink-muted">{label}</h3>
+      <div className="sheet-actions px-2">{children}</div>
+    </section>
   );
 }
