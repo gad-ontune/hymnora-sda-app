@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Bell, BookOpen, Check, ChevronRight, FileText, Globe2, KeyRound, LockKeyhole, LogOut, MonitorSmartphone, Moon, Palette, ShieldCheck, Sparkles, Sun } from "lucide-react";
+import { Bell, BookOpen, Check, ChevronRight, FileText, Globe2, KeyRound, Landmark, Leaf, LockKeyhole, LogOut, MonitorSmartphone, Moon, MoonStar, Palette, ShieldCheck, Sparkles, Sun, Sunset } from "lucide-react";
 import { useState, useEffect } from "react";
 import { PageIntro } from "@/components/page-intro";
 import { RemindersModal } from "@/components/reminders-modal";
@@ -11,10 +11,14 @@ import { listSessions, signOut, signOutEverywhere, updatePreferences, useSession
 import { LANGUAGES, useI18n, useTheme, type ThemeChoice } from "@/lib/i18n";
 
 const themes = [
-  { labelKey: "settings.themeCanvas", value: "light", icon: Sun, swatch: "bg-[#f4efe4]", ring: "ring-[#f4efe4]" },
-  { labelKey: "settings.themeWarm", value: "warm", icon: BookOpen, swatch: "bg-[#f1e5c7]", ring: "ring-[#e4c97e]" },
-  { labelKey: "settings.themeDusk", value: "dark", icon: Moon, swatch: "bg-[#1f1e19]", ring: "ring-[#1f1e19]" },
-  { labelKey: "settings.themeSystem", value: "system", icon: MonitorSmartphone, swatch: "bg-[#49624c]", ring: "ring-[#49624c]" },
+  { labelKey: "settings.themeCanvas", value: "light", icon: Sun },
+  { labelKey: "settings.themeWarm", value: "warm", icon: BookOpen },
+  { labelKey: "settings.themeSanctuary", value: "sanctuary", icon: Landmark },
+  { labelKey: "settings.themeGarden", value: "garden", icon: Leaf },
+  { labelKey: "settings.themeSunset", value: "sunset", icon: Sunset },
+  { labelKey: "settings.themeDusk", value: "dark", icon: Moon },
+  { labelKey: "settings.themeMidnight", value: "midnight", icon: MoonStar },
+  { labelKey: "settings.themeSystem", value: "system", icon: MonitorSmartphone },
 ] as const;
 
 type Update = {
@@ -47,7 +51,7 @@ export function SettingsExperience() {
 
 function SettingsBody({ user, preferences }: { user: SessionUser | null; preferences: SessionPreferences | null }) {
   const { language, setLanguage, t } = useI18n();
-  const { theme, setTheme } = useTheme();
+  const { theme, setTheme, resolvedTheme } = useTheme();
   const [saved, setSaved] = useState(false);
   const [remindersOpen, setRemindersOpen] = useState(false);
   const [profile, setProfile] = useState({
@@ -155,7 +159,7 @@ function SettingsBody({ user, preferences }: { user: SessionUser | null; prefere
             <CardHead icon={Palette} tone="bg-gold-soft text-gold" title={t("settings.appearance")} note="How Hymnora is dressed when you open it." />
             <div className="mt-6">
               <p className="text-xs font-bold uppercase tracking-[0.12em] text-ink-muted">{t("settings.atmosphere")}</p>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
                 {themes.map((item) => {
                   const Icon = item.icon;
                   const active = theme === item.value;
@@ -163,18 +167,24 @@ function SettingsBody({ user, preferences }: { user: SessionUser | null; prefere
                     <button
                       key={item.value}
                       type="button"
+                      aria-pressed={active}
+                      data-theme-option={item.value}
                       onClick={() => { setTheme(item.value as ThemeChoice); persist({ theme: item.value }); }}
-                      className={`relative flex items-center gap-3 rounded-2xl border p-3.5 text-left transition ${active ? "border-sage bg-sage-soft/60" : "border-line bg-surface-soft/50 hover:border-gold/50"}`}
+                      className={`group flex flex-col gap-2 rounded-2xl border p-2 text-left transition ${active ? "border-sage bg-sage-soft/50 ring-2 ring-sage/25" : "border-line bg-surface-soft/40 hover:border-gold/60 hover:bg-surface-soft/70"}`}
                     >
-                      <span className={`grid size-9 place-items-center rounded-xl border border-white/60 ${item.swatch} ${active ? "bg-sage text-white" : "text-ink-soft"}`}>
-                        <Icon size={17} />
+                      <ThemePreview theme={item.value === "system" ? resolvedTheme : item.value} />
+                      <span className="flex items-center gap-1.5 px-0.5 pb-0.5">
+                        <Icon size={14} className={active ? "text-sage" : "text-ink-muted"} aria-hidden />
+                        <span className="truncate text-[12.5px] font-semibold">{t(item.labelKey)}</span>
+                        {active ? <span className="ml-auto grid size-5 shrink-0 place-items-center rounded-full bg-sage text-white"><Check size={11} /></span> : null}
                       </span>
-                      <span className="text-sm font-semibold">{t(item.labelKey)}</span>
-                      {active ? <span className="ml-auto grid size-6 place-items-center rounded-full bg-sage text-white"><Check size={14} /></span> : null}
                     </button>
                   );
                 })}
               </div>
+              <p className="mt-3 text-xs text-ink-muted">
+                Every atmosphere repaints the rail, the header and the cards, not just the page behind them.
+              </p>
             </div>
             <div className="mt-6">
               <p className="text-xs font-bold uppercase tracking-[0.12em] text-ink-muted">{t("settings.platformLang")}</p>
@@ -540,6 +550,47 @@ function SecuritySection({ user }: { user: SessionUser | null }) {
         </button>
       </div>
     </section>
+  );
+}
+
+/**
+ * A tiny, live preview of an atmosphere.
+ *
+ * It carries its own `data-theme`, so every colour inside resolves against that
+ * palette rather than the one currently applied to the page — a theme card that
+ * showed the active theme's colours would be a row of identical swatches. The
+ * shapes are the app's furniture in miniature: the top bar, the rail, two cards
+ * and the three accents.
+ */
+function ThemePreview({ theme }: { theme: string }) {
+  return (
+    <span
+      data-theme={theme}
+      aria-hidden
+      className="flex h-[74px] w-full flex-col overflow-hidden rounded-xl border border-line/70 bg-canvas"
+    >
+      <span className="flex h-3.5 shrink-0 items-center gap-1 bg-ink-fill px-1.5">
+        <span className="size-1 rounded-full bg-gold" />
+        <span className="h-1 w-5 rounded-full bg-white/25" />
+        <span className="ml-auto h-1 w-3 rounded-full bg-white/20" />
+      </span>
+      <span className="flex min-h-0 flex-1">
+        <span className="flex w-4 shrink-0 flex-col gap-1 bg-ink-fill p-1">
+          <span className="h-1 w-full rounded-full bg-white/30" />
+          <span className="h-1 w-2/3 rounded-full bg-white/15" />
+          <span className="h-1 w-3/4 rounded-full bg-white/15" />
+        </span>
+        <span className="flex flex-1 flex-col gap-1 p-1.5">
+          <span className="h-2 w-3/4 rounded-[3px] bg-surface shadow-sm" />
+          <span className="h-2 w-1/2 rounded-[3px] bg-surface shadow-sm" />
+          <span className="mt-auto flex items-center gap-1">
+            <span className="size-1.5 rounded-full bg-gold" />
+            <span className="size-1.5 rounded-full bg-sage" />
+            <span className="size-1.5 rounded-full bg-terracotta" />
+          </span>
+        </span>
+      </span>
+    </span>
   );
 }
 
