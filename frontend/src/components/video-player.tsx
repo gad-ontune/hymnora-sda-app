@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Loader2, Play, VolumeX } from "lucide-react";
 import { loadYouTubeApi, type YtPlayer } from "@/lib/youtube-player";
 
 /**
@@ -10,15 +12,16 @@ import { loadYouTubeApi, type YtPlayer } from "@/lib/youtube-player";
  * because Next's `<YouTube>`-style wrappers are not in this project's dependency
  * list and the same loader the audio engine uses is already here and tested.
  *
- * Two things that are easy to get wrong and that this got wrong first:
+ * Three things that are easy to get wrong and that this got wrong first:
  *
- * - The host `<div>` is rendered unconditionally, and the poster is an overlay
- *   above it. The player constructor *replaces* the host element with an iframe,
- *   so the host has to exist before the effect runs; rendering it only once the
- *   player is ready means it never exists at the moment it is needed.
- * - `onReady` is held in a ref rather than listed as a dependency. A caller that
- *   passes an inline arrow function would otherwise re-run this effect — and so
- *   destroy and rebuild the player — on every single render.
+ * - The YouTube constructor *replaces* the element it is given with an iframe.
+ *   The React-owned host div must never be that element: React would lose track
+ *   of its own DOM node. A plain mount node lives inside the host instead.
+ * - The poster is a real button. A click before the iframe is ready has to be
+ *   remembered, or the first tap on the play triangle does nothing at all.
+ * - `onReady` is held in a ref rather than listed as an effect dependency. A
+ *   caller that passes an inline arrow function would otherwise re-run this
+ *   effect — and so destroy and rebuild the player — on every single render.
  */
 export function VideoPlayer({
   videoId,
@@ -26,20 +29,73 @@ export function VideoPlayer({
   thumbnail,
   isLive,
   onReady,
+  autoplay = false,
 }: {
   videoId: string;
   title: string;
   thumbnail: string;
   isLive: boolean;
   onReady?: () => void;
+  autoplay?: boolean;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
+  const playerRef = useRef<YtPlayer | null>(null);
+  const pendingPlayRef = useRef(false);
   const onReadyRef = useRef(onReady);
+  const autoplayRef = useRef(autoplay);
   const [state, setState] = useState<"loading" | "error" | "ready">("loading");
+  const [posterVisible, setPosterVisible] = useState(true);
+  const [muted, setMuted] = useState(false);
 
   useEffect(() => {
     onReadyRef.current = onReady;
   }, [onReady]);
+
+  useEffect(() => {
+    autoplayRef.current = autoplay;
+  }, [autoplay]);
+
+  /** Plays only when the API is actually ready; a click before then is queued. */
+  const playIfReady = useCallback(() => {
+    const player = playerRef.current;
+    if (!player) return false;
+    try {
+      player.playVideo();
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const unmute = useCallback(() => {
+    const player = playerRef.current;
+    if (!player) return;
+    try {
+      player.unMute();
+      setMuted(player.isMuted());
+    } catch {
+      // The iframe controls remain available if the API refuses the call.
+    }
+  }, []);
+
+  const requestPlay = () => {
+    pendingPlayRef.current = true;
+    // Hide the poster in this click's render: waiting for onReady is exactly the
+    // dead first tap this component used to have.
+    setPosterVisible(false);
+    const player = playerRef.current;
+    if (player) {
+      // This is a real gesture, unlike onReady after a navigation, so audio can
+      // be restored here if autoplay started us muted.
+      try {
+        if (player.isMuted()) player.unMute();
+      } catch {
+        // The visible unmute button remains as the fallback.
+      }
+      if (playIfReady()) pendingPlayRef.current = false;
+      setMuted(player.isMuted());
+    }
+  };
 
   useEffect(() => {
     let disposed = false;
@@ -47,11 +103,17 @@ export function VideoPlayer({
     const host = hostRef.current;
     if (!host) return;
 
+    // The API owns this node and will replace it with its iframe. React never
+    // sees it, so its reconciliation stays intact.
+    const mount = document.createElement("div");
+    mount.className = "size-full";
+    host.replaceChildren(mount);
+
     void (async () => {
       try {
         await loadYouTubeApi();
         if (disposed) return;
-        player = new window.YT!.Player(host, {
+        player = new window.YT!.Player(mount, {
           videoId,
           playerVars: {
             autoplay: 0,
@@ -62,15 +124,30 @@ export function VideoPlayer({
             origin: window.location.origin,
           },
           events: {
-            onReady: () => {
+            onReady: (event: { target: YtPlayer }) => {
               if (disposed) return;
+              // `event.target` is authoritative even if the constructor callback
+              // fired before the assignment below completed.
+              playerRef.current = event.target;
               setState("ready");
+
+              // A navigation carries no user gesture, so autoplay must start
+              // muted; the unmute button is the reliable way to restore sound.
+              if (autoplayRef.current) {
+                event.target.mute();
+                setMuted(true);
+              }
+              if (autoplayRef.current || pendingPlayRef.current) {
+                if (playIfReady()) pendingPlayRef.current = false;
+                setPosterVisible(false);
+                setMuted(event.target.isMuted());
+              }
               onReadyRef.current?.();
             },
             onError: () => {
               if (disposed) return;
-              // 101 and 150 are the embedding refusals. A blank rectangle is
-              // worse than a link out, so the error state offers the watch link.
+              // 101 and 150 are the embedding refusals. An in-app explanation is
+              // better than a dead rectangle and keeps the viewer in the app.
               setState("error");
             },
           },
@@ -82,55 +159,73 @@ export function VideoPlayer({
 
     return () => {
       disposed = true;
+      playerRef.current = null;
+      pendingPlayRef.current = false;
       try {
         player?.destroy();
       } catch {
         // A player whose constructor threw has nothing to destroy.
       }
+      host.replaceChildren();
     };
-  }, [videoId]);
+  }, [videoId, playIfReady]);
 
   return (
     <div className="relative aspect-video w-full overflow-hidden rounded-[22px] bg-ink-fill shadow-soft">
-      {/* Always present: the constructor replaces this element with the iframe. */}
+      {/* React owns this div; the IFrame API owns a plain node inside it. */}
       <div ref={hostRef} className="size-full" />
 
-      {state === "loading" ? (
-        <div
-          className="absolute inset-0 size-full"
-          role="img"
-          aria-label={`${title} — press play to start`}
+      {state === "loading" && posterVisible ? (
+        <button
+          type="button"
+          onClick={requestPlay}
+          aria-label={`Play ${title}`}
+          className="group absolute inset-0 size-full overflow-hidden focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-gold"
         >
           {/* eslint-disable-next-line @next/next/no-img-element -- the thumbnail is a
               remote YouTube URL on an unknown host, so `next/image` would need every
               one of them allow-listed in the loader config. This is the one place a
               plain `img` is the right tool. */}
-          <img src={thumbnail} alt="" className="size-full object-cover opacity-70" />
-          <span className="absolute inset-0 grid place-items-center bg-ink-fill/35">
-            <span className="grid size-16 place-items-center rounded-full bg-terracotta text-white shadow-lift">
-              <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true">
-                <path d="M8 5v14l11-7z" />
-              </svg>
+          <img src={thumbnail} alt="" loading="eager" fetchPriority="high" className="size-full object-cover opacity-70" />
+          <span className="absolute inset-0 grid place-items-center bg-ink-fill/35 transition group-hover:bg-ink-fill/45">
+            <span className="grid size-16 place-items-center rounded-full bg-terracotta text-white shadow-lift transition-transform group-hover:scale-105">
+              <Play size={26} fill="currentColor" className="translate-x-0.5" aria-hidden="true" />
             </span>
+          </span>
+        </button>
+      ) : null}
+
+      {state === "loading" && !posterVisible ? (
+        <div className="pointer-events-none absolute inset-0 grid place-items-center bg-canvas/60">
+          <span className="inline-flex items-center gap-2 rounded-full bg-ink-fill/85 px-4 py-2 text-xs font-semibold text-white">
+            <Loader2 size={15} className="animate-spin" aria-hidden="true" /> Starting playback…
           </span>
         </div>
       ) : null}
 
+      {muted && state === "ready" ? (
+        <button
+          type="button"
+          onClick={unmute}
+          className="absolute bottom-4 left-4 inline-flex h-9 items-center gap-2 rounded-full bg-ink-fill/90 px-4 text-xs font-semibold text-white shadow-lift transition hover:bg-ink-fill focus-visible:outline-2 focus-visible:outline-gold"
+        >
+          <VolumeX size={15} aria-hidden="true" /> Tap to unmute
+        </button>
+      ) : null}
+
       {state === "error" ? (
-        <div className="absolute inset-0 grid place-items-center bg-ink-fill p-8 text-center">
+        <div className="absolute inset-0 grid place-items-center bg-canvas p-8 text-center">
           <div>
-            <p className="text-sm font-semibold text-white">This video cannot be played here.</p>
-            <p className="mx-auto mt-2 max-w-sm text-xs leading-5 text-white/60">
-              The channel does not allow embedded playback. Open it on YouTube instead.
+            <p className="text-sm font-semibold text-ink">This video cannot be played here.</p>
+            <p className="mx-auto mt-2 max-w-sm text-xs leading-5 text-ink-muted">
+              Try another from the catalogue — every video here plays inside the app.
             </p>
-            <a
-              href={`https://www.youtube.com/watch?v=${videoId}`}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-5 inline-flex h-10 items-center rounded-xl bg-white px-4 text-sm font-bold text-ink transition hover:bg-white/90"
+            <Link
+              href="/videos"
+              className="mt-5 inline-flex h-10 items-center rounded-xl bg-gold px-4 text-sm font-bold text-canvas transition hover:opacity-90"
             >
-              Watch on YouTube
-            </a>
+              Back to all videos
+            </Link>
           </div>
         </div>
       ) : null}
