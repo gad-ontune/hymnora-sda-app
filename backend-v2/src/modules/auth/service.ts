@@ -171,7 +171,9 @@ export function getPreferences(userId: string): UserPreferences {
 export const preferencesSchema = z
   .object({
     language: z.string().trim().min(2).max(40).optional(),
-    theme: z.enum(["light", "warm", "dark", "system"]).optional(),
+    theme: z
+      .enum(["light", "warm", "dark", "sanctuary", "garden", "sunset", "midnight", "system"])
+      .optional(),
     readingTheme: z.enum(["cream", "light", "dark"]).optional(),
     readerFontSize: z.number().int().min(14).max(28).optional(),
     autoplay: z.boolean().optional(),

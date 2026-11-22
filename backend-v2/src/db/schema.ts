@@ -45,7 +45,7 @@ CREATE INDEX IF NOT EXISTS idx_users_role ON users (role);
 CREATE TABLE IF NOT EXISTS user_preferences (
   user_id                 TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   language                TEXT NOT NULL DEFAULT 'English',
-  theme                   TEXT NOT NULL DEFAULT 'warm' CHECK (theme IN ('light','warm','dark','system')),
+  theme                   TEXT NOT NULL DEFAULT 'warm' CHECK (theme IN ('light','warm','dark','sanctuary','garden','sunset','midnight','system')),
   reading_theme           TEXT NOT NULL DEFAULT 'cream' CHECK (reading_theme IN ('cream','light','dark')),
   reader_font_size        INTEGER NOT NULL DEFAULT 18,
   autoplay                INTEGER NOT NULL DEFAULT 1,
@@ -1165,6 +1165,77 @@ FROM user_preferences_old;
 DROP TABLE user_preferences_old;
 `;
 
+/**
+ * 013_preferences_atmospheres.sql
+ *
+ * The Settings page grew four more atmospheres (sanctuary, garden, sunset,
+ * midnight), and SQLite cannot widen a CHECK constraint in place. So this is
+ * the same table-rebuild dance as 012, with two differences:
+ *
+ *   1. The theme CHECK now names every leaf the frontend can resolve. `system`
+ *      stays a stored choice; the client resolves it before painting.
+ *   2. The reminder columns that 012's hand-written copy omitted are restored.
+ *      That migration copied only the columns it listed, which silently dropped
+ *      the eleven reminder/streak columns added by 005; the API then read
+ *      `undefined` for every one of them. They are not selected from the old
+ *      table here — 012's table does not have them — so they come back with
+ *      their schema defaults, which is the best available answer.
+ */
+const preferencesAtmospheres = `
+ALTER TABLE user_preferences RENAME TO user_preferences_old;
+
+CREATE TABLE user_preferences (
+  user_id                 TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  language                TEXT NOT NULL DEFAULT 'English',
+  theme                   TEXT NOT NULL DEFAULT 'warm' CHECK (theme IN ('light','warm','dark','sanctuary','garden','sunset','midnight','system')),
+  reading_theme           TEXT NOT NULL DEFAULT 'cream' CHECK (reading_theme IN ('cream','light','dark')),
+  reader_font_size        INTEGER NOT NULL DEFAULT 18,
+  autoplay                INTEGER NOT NULL DEFAULT 1,
+  crossfade               INTEGER NOT NULL DEFAULT 0,
+  normalize_volume        INTEGER NOT NULL DEFAULT 1,
+  download_quality        TEXT NOT NULL DEFAULT 'high' CHECK (download_quality IN ('standard','high','lossless')),
+  data_saver              INTEGER NOT NULL DEFAULT 0,
+  captions                INTEGER NOT NULL DEFAULT 0,
+  bedroom_mode            INTEGER NOT NULL DEFAULT 0,
+  notify_new_content      INTEGER NOT NULL DEFAULT 1,
+  notify_live_events      INTEGER NOT NULL DEFAULT 1,
+  notify_weekly_letter    INTEGER NOT NULL DEFAULT 0,
+  reminders_enabled       INTEGER NOT NULL DEFAULT 1,
+  notify_daily_verse      INTEGER NOT NULL DEFAULT 1,
+  daily_verse_time        TEXT NOT NULL DEFAULT '07:00',
+  notify_reading_streak   INTEGER NOT NULL DEFAULT 1,
+  streak_reminder_time    TEXT NOT NULL DEFAULT '19:30',
+  notify_live_worship     INTEGER NOT NULL DEFAULT 1,
+  live_alert_lead_minutes INTEGER NOT NULL DEFAULT 15,
+  notify_new_hymns        INTEGER NOT NULL DEFAULT 0,
+  reading_streak_current  INTEGER NOT NULL DEFAULT 0,
+  reading_streak_best     INTEGER NOT NULL DEFAULT 0,
+  last_reading_day        TEXT,
+  event_reminder_minutes  INTEGER NOT NULL DEFAULT 60,
+  default_bible_version   TEXT NOT NULL DEFAULT 'KJV',
+  bible_translation       TEXT NOT NULL DEFAULT 'KJV',
+  followed_topics         TEXT NOT NULL DEFAULT '[]',
+  updated_at              TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+INSERT INTO user_preferences (
+  user_id, language, theme, reading_theme, reader_font_size, autoplay,
+  crossfade, normalize_volume, download_quality, data_saver, captions,
+  bedroom_mode, notify_new_content, notify_live_events, notify_weekly_letter,
+  event_reminder_minutes, default_bible_version, bible_translation,
+  followed_topics, updated_at
+)
+SELECT
+  user_id, language, theme, reading_theme, reader_font_size, autoplay,
+  crossfade, normalize_volume, download_quality, data_saver, captions,
+  bedroom_mode, notify_new_content, notify_live_events, notify_weekly_letter,
+  event_reminder_minutes, default_bible_version, bible_translation,
+  followed_topics, updated_at
+FROM user_preferences_old;
+
+DROP TABLE user_preferences_old;
+`;
+
 export const migrations: Migration[] = [
   { id: "001", name: "core_schema", sql: coreSchema },
   { id: "002", name: "full_text_search", sql: ftsSchema },
@@ -1178,5 +1249,6 @@ export const migrations: Migration[] = [
   { id: "010", name: "reels_follows_comments", sql: communityTables },
   { id: "011", name: "reel_likes", sql: reelLikes },
   { id: "012", name: "preferences_theme_and_flags", sql: preferenceExtras },
+  { id: "013", name: "preferences_atmospheres", sql: preferencesAtmospheres },
 ];
 

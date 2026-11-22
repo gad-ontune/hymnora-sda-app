@@ -195,7 +195,7 @@ export function deleteAsset(id: string): void {
 
 export const preferencesInputSchema = z.object({
   language: z.string().trim().min(2).max(40).optional(),
-  theme: z.enum(["light", "warm", "dark"]).optional(),
+  theme: z.enum(["light", "warm", "dark", "sanctuary", "garden", "sunset", "midnight", "system"]).optional(),
   readingTheme: z.enum(["cream", "light", "dark"]).optional(),
   readerFontSize: z.number().int().min(12).max(32).optional(),
   autoplay: z.boolean().optional(),

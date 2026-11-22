@@ -460,7 +460,7 @@ export type User = {
 
 export type UserPreferences = {
   language: string;
-  theme: "light" | "warm" | "dark" | "system";
+  theme: "light" | "warm" | "dark" | "sanctuary" | "garden" | "sunset" | "midnight" | "system";
   readingTheme: "cream" | "light" | "dark";
   readerFontSize: number;
   autoplay: boolean;
