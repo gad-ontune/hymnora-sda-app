@@ -3,10 +3,10 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
-import { ArrowLeft, Check, Link2, MoreHorizontal, Share2 } from "lucide-react";
+import { ArrowLeft, Check, Share2 } from "lucide-react";
 import { useHymnora } from "@/components/hymnora-provider";
 import { VideoPlayer } from "@/components/video-player";
-import { formatCount, formatViews, formatWhen } from "@/lib/format";
+import { formatWhen } from "@/lib/format";
 import { imgSrc } from "@/lib/image";
 import type { VideoDetail } from "@/lib/types";
 
@@ -20,7 +20,13 @@ const FALLBACK_ART = "/images/worship-singer.jpg";
  * reuses the audio store: it is the same human deciding they like this thing,
  * and a second store would mean they could disagree with each other.
  */
-export function WatchExperience({ detail }: { detail: VideoDetail }) {
+export function WatchExperience({
+  detail,
+  autoplay = false,
+}: {
+  detail: VideoDetail;
+  autoplay?: boolean;
+}) {
   const { video, description, channel, more } = detail;
   const { isFavorite, toggleFavorite } = useHymnora();
   const [copied, setCopied] = useState(false);
@@ -67,13 +73,14 @@ export function WatchExperience({ detail }: { detail: VideoDetail }) {
             title={video.title}
             thumbnail={imgSrc(video.thumbnail, FALLBACK_ART)}
             isLive={video.isLive}
+            autoplay={autoplay}
           />
 
           <h1 className="mt-5 font-display text-[24px] font-semibold leading-tight tracking-[-0.02em] sm:text-[30px]">
             {video.title}
           </h1>
           <p className="mt-2 text-sm text-ink-muted">
-            {formatViews(video.views)} · {formatWhen(video.publishedAt)} · {video.duration}
+            {[formatWhen(video.publishedAt), video.duration].filter(Boolean).join(" · ")}
           </p>
 
           <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -82,24 +89,8 @@ export function WatchExperience({ detail }: { detail: VideoDetail }) {
                 <path d="M12 20.5 3.8 12.3a5 5 0 1 1 7.1-7l1.1 1.1 1.1-1.1a5 5 0 1 1 7.1 7Z" />
               </svg>
             </ActionButton>
-            {video.likes > 0 ? (
-              <span className="inline-flex h-9 items-center gap-1.5 rounded-full border border-line bg-surface px-3.5 text-sm font-semibold text-ink">
-                {formatCount(video.likes)} {video.likes === 1 ? "like" : "likes"}
-              </span>
-            ) : null}
             <ActionButton onClick={() => void share()} active={copied} activeLabel="Link copied" label="Share">
               {copied ? <Check size={16} /> : <Share2 size={16} />}
-            </ActionButton>
-            <a
-              href={video.watchUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-line bg-surface px-3.5 text-sm font-semibold text-ink transition hover:border-gold/60"
-            >
-              <Link2 size={16} /> YouTube
-            </a>
-            <ActionButton onClick={() => navigator.clipboard?.writeText(video.watchUrl)} label="More">
-              <MoreHorizontal size={16} />
             </ActionButton>
           </div>
 
@@ -154,9 +145,7 @@ export function WatchExperience({ detail }: { detail: VideoDetail }) {
                     <p className="line-clamp-2 text-sm font-semibold leading-snug text-ink transition group-hover:text-terracotta">
                       {item.title}
                     </p>
-                    <p className="mt-1 text-xs text-ink-muted">
-                      {formatViews(item.views)} · {formatWhen(item.publishedAt)}
-                    </p>
+                    <p className="mt-1 text-xs text-ink-muted">{formatWhen(item.publishedAt)}</p>
                   </div>
                 </Link>
               ))}

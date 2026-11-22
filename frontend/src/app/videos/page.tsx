@@ -7,10 +7,10 @@ export const metadata = {
 };
 
 export default async function VideosPage() {
-  // Both the first page and the facet counts come from the server, so the grid
-  // is populated on first paint and the chip counts are real rather than guesses.
+  // Both the first page and the facets come from the server, so the grid is
+  // populated on first paint and every filter has a real label to show.
   const [initial, facets] = await Promise.all([
-    getVideoPageData({ limit: 24 }),
+    getVideoPageData({ limit: 48 }),
     getVideoFacetsData(),
   ]);
   return <VideoExperience initial={initial} facets={facets} />;

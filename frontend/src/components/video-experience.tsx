@@ -2,10 +2,10 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState, useTransition } from "react";
-import { Check, ChevronDown, Play } from "lucide-react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { Check, ChevronDown, Loader2, Play } from "lucide-react";
 import { getVideoPageData } from "@/lib/data";
-import { formatViews, formatWhen } from "@/lib/format";
+import { formatWhen } from "@/lib/format";
 import { imgSrc } from "@/lib/image";
 import type { VideoCard, VideoFacets, VideoPage, VideoSort } from "@/lib/types";
 
@@ -26,7 +26,18 @@ const SORT_OPTIONS: { id: VideoSort; label: string }[] = [
   { id: "added", label: "Recently Added" },
 ];
 
-const PAGE_SIZE = 24;
+const PAGE_SIZE = 48;
+
+/** Appended pages are kept apart from the server page so a filter reset is clean. */
+function withUnique(items: VideoCard[], incoming: VideoCard[]): VideoCard[] {
+  const seen = new Set(items.map((item) => item.id));
+  const unique = incoming.filter((item) => {
+    if (seen.has(item.id)) return false;
+    seen.add(item.id);
+    return true;
+  });
+  return unique.length > 0 ? [...items, ...unique] : items;
+}
 
 /**
  * The video page.
@@ -38,17 +49,26 @@ const PAGE_SIZE = 24;
  */
 export function VideoExperience({ initial, facets }: { initial: VideoPage; facets: VideoFacets }) {
   const [page, setPage] = useState(initial);
+  const [appended, setAppended] = useState<VideoCard[]>([]);
   const [category, setCategory] = useState(ALL);
   const [region, setRegion] = useState(ALL);
   const [sort, setSort] = useState<VideoSort>("newest");
+  const [loadingMore, setLoadingMore] = useState(false);
   const [loading, startTransition] = useTransition();
+  const generationRef = useRef(0);
 
-  // The one place the client fetches. The whole request is inside the transition
-  // scope, so `isPending` is true for the duration of the fetch rather than only
-  // for the commit that follows it — and the current grid stays on screen the
-  // whole time, so switching a chip does not flash empty.
+  const items = withUnique(page.items, appended);
+  const hasMore = items.length < page.total;
+
+  // The one place a filter change refetches. The whole request is inside the
+  // transition scope, so `isPending` is true for the duration of the fetch rather
+  // than only for the commit that follows it — and the current grid stays on
+  // screen the whole time, so switching a chip does not flash empty.
   useEffect(() => {
     let cancelled = false;
+    // A filter change increments this in its event handler, so an append from
+    // the previous filters can no longer land in the new grid.
+    const generation = generationRef.current;
     const query = {
       category: category === ALL ? undefined : category,
       region: region === ALL ? undefined : region,
@@ -58,7 +78,7 @@ export function VideoExperience({ initial, facets }: { initial: VideoPage; facet
     startTransition(async () => {
       try {
         const next = await getVideoPageData(query);
-        if (!cancelled) setPage(next);
+        if (!cancelled && generation === generationRef.current) setPage(next);
       } catch {
         // Deliberately keep the current grid. Blanking it turns a failed request
         // into "the videos disappeared", which is both a lie and the most
@@ -70,13 +90,42 @@ export function VideoExperience({ initial, facets }: { initial: VideoPage; facet
     };
   }, [category, region, sort]);
 
+  // Resetting here rather than in the fetch effect keeps filter changes out of
+  // the effect body and invalidates any append still in flight.
+  const changeFilter = () => {
+    generationRef.current += 1;
+    setAppended([]);
+    setLoadingMore(false);
+  };
+
+  const loadMore = async () => {
+    if (loading || loadingMore || !hasMore) return;
+    const generation = generationRef.current;
+    setLoadingMore(true);
+    try {
+      const next = await getVideoPageData({
+        category: category === ALL ? undefined : category,
+        region: region === ALL ? undefined : region,
+        sort,
+        limit: PAGE_SIZE,
+        offset: items.length,
+      });
+      if (generation !== generationRef.current) return;
+      const merged = withUnique(items, next.items);
+      setAppended((current) => withUnique(current, next.items));
+      // A page of duplicates means the catalogue moved under us; stop here
+      // rather than offering a button that can never add another row.
+      setPage((current) => ({ ...current, total: merged.length > items.length ? next.total : merged.length }));
+    } catch {
+      // Keep the on-screen grid; a failed append is not a failed catalogue.
+    } finally {
+      if (generation === generationRef.current) setLoadingMore(false);
+    }
+  };
+
   const chips = [
-    { id: ALL, label: "All", count: facets.total },
-    ...facets.categories.map((item) => ({
-      id: item.id,
-      label: item.label,
-      count: item.count,
-    })),
+    { id: ALL, label: "All" },
+    ...facets.categories.map((item) => ({ id: item.id, label: item.label })),
   ];
 
   return (
@@ -93,7 +142,10 @@ export function VideoExperience({ initial, facets }: { initial: VideoPage; facet
           <button
             key={chip.id}
             type="button"
-            onClick={() => setCategory(chip.id)}
+            onClick={() => {
+              changeFilter();
+              setCategory(chip.id);
+            }}
             aria-pressed={category === chip.id}
             className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition ${
               category === chip.id
@@ -102,9 +154,6 @@ export function VideoExperience({ initial, facets }: { initial: VideoPage; facet
             }`}
           >
             {chip.label}
-            <span className={`ml-1.5 text-xs tabular-nums ${category === chip.id ? "text-white/60" : "text-ink-muted/70"}`}>
-              {chip.count}
-            </span>
           </button>
         ))}
       </div>
@@ -117,34 +166,59 @@ export function VideoExperience({ initial, facets }: { initial: VideoPage; facet
             { id: ALL, label: "Everywhere" },
             ...facets.regions.map((item) => ({ id: item.id, label: item.label })),
           ]}
-          onChange={setRegion}
+          onChange={(value) => {
+            changeFilter();
+            setRegion(value);
+          }}
         />
         <Dropdown
           label="Sort by"
           value={sort}
           options={SORT_OPTIONS.map((option) => ({ id: option.id, label: option.label }))}
-          onChange={(value) => setSort(value as VideoSort)}
+          onChange={(value) => {
+            changeFilter();
+            setSort(value as VideoSort);
+          }}
         />
-        <span className="ml-auto text-sm tabular-nums text-ink-muted">
-          {loading ? "Loading…" : `${page.total} ${page.total === 1 ? "video" : "videos"}`}
-        </span>
       </div>
 
-      {page.items.length === 0 ? (
+      {items.length === 0 ? (
         <div className="rounded-[22px] border border-dashed border-line bg-surface p-12 text-center text-sm text-ink-muted">
           Nothing here yet. Try a different category or region.
         </div>
       ) : (
-        <div className={`grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 ${loading ? "opacity-60" : ""}`}>
-          {page.items.map((video) => (
-            <GridCard key={video.id} video={video} />
+        <div
+          className={`grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 ${loading ? "opacity-60" : ""}`}
+          aria-busy={loading || loadingMore}
+        >
+          {items.map((video, index) => (
+            <GridCard key={video.id} video={video} eager={index < 4} />
           ))}
         </div>
       )}
 
-      {page.total > page.items.length ? (
-        <p className="mt-6 text-center text-sm text-ink-muted">
-          Showing the {page.items.length} most recent of {page.total}. Narrow the filters to see the rest.
+      {hasMore && items.length > 0 ? (
+        <div className="mt-8 flex justify-center">
+          <button
+            type="button"
+            onClick={() => void loadMore()}
+            disabled={loading || loadingMore}
+            className="inline-flex h-12 min-w-[210px] items-center justify-center gap-2 rounded-full border border-line bg-surface px-6 text-sm font-semibold text-ink shadow-soft transition hover:border-gold/60 hover:bg-surface-soft disabled:cursor-wait disabled:opacity-60"
+          >
+            {loading || loadingMore ? (
+              <>
+                <Loader2 size={16} className="animate-spin" aria-hidden="true" /> Loading videos…
+              </>
+            ) : (
+              "Load more videos"
+            )}
+          </button>
+        </div>
+      ) : null}
+
+      {!hasMore && items.length > 0 && !loading ? (
+        <p className="mx-auto mt-8 flex w-fit items-center gap-2 rounded-full border border-line bg-surface-soft px-4 py-2 text-xs font-medium text-ink-muted">
+          <Check size={14} className="text-sage" aria-hidden="true" /> You have reached the end of the catalogue.
         </p>
       ) : null}
     </div>
@@ -214,15 +288,17 @@ function Dropdown({
   );
 }
 
-function GridCard({ video }: { video: VideoCard }) {
+function GridCard({ video, eager = false }: { video: VideoCard; eager?: boolean }) {
   return (
     <article className="group">
-      <Link href={`/videos/${video.videoId}`} className="block">
+      {/* The thumb is the play affordance: it starts playback, the title does not. */}
+      <Link href={`/videos/${video.videoId}?play=1`} className="block" aria-label={`Play ${video.title}`}>
         <div className="relative aspect-video overflow-hidden rounded-[18px] bg-surface-soft">
           <Image
             src={imgSrc(video.thumbnail, FALLBACK_ART)}
             alt=""
             fill
+            priority={eager}
             sizes="(max-width: 640px) 100vw, (max-width: 1280px) 33vw, 25vw"
             className="object-cover transition duration-500 group-hover:scale-105"
           />
@@ -234,9 +310,9 @@ function GridCard({ video }: { video: VideoCard }) {
           <span className="absolute bottom-2.5 right-2.5 rounded-md bg-ink-fill/85 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-white">
             {video.duration}
           </span>
-          <span className="absolute inset-0 grid place-items-center bg-ink-fill/25 opacity-0 transition group-hover:opacity-100">
-            <span className="grid size-12 place-items-center rounded-full bg-ink-fill/80 text-white shadow-lift">
-              <Play size={18} fill="currentColor" className="translate-x-0.5" />
+          <span className="absolute inset-0 grid place-items-center bg-ink-fill/25 transition group-hover:bg-ink-fill/40">
+            <span className="grid size-12 place-items-center rounded-full bg-ink-fill/80 text-white shadow-lift transition group-hover:bg-terracotta">
+              <Play size={18} fill="currentColor" className="translate-x-0.5" aria-hidden="true" />
             </span>
           </span>
         </div>
@@ -248,9 +324,7 @@ function GridCard({ video }: { video: VideoCard }) {
           </h3>
         </Link>
         <p className="mt-1.5 truncate text-xs text-ink-muted">{video.channel}</p>
-        <p className="mt-0.5 text-xs text-ink-muted">
-          {formatViews(video.views)} · {formatWhen(video.publishedAt)}
-        </p>
+        <p className="mt-0.5 text-xs text-ink-muted">{formatWhen(video.publishedAt)}</p>
       </div>
     </article>
   );

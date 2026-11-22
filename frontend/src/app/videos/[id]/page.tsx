@@ -7,8 +7,14 @@ export const metadata = {
   description: "Watch an SDA video, sermon or worship broadcast.",
 };
 
-export default async function WatchPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+export default async function WatchPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ play?: string }>;
+}) {
+  const [{ id }, { play }] = await Promise.all([params, searchParams]);
   let detail;
   try {
     detail = await getVideoDetailData(id);
@@ -17,5 +23,5 @@ export default async function WatchPage({ params }: { params: Promise<{ id: stri
     // uploader may have removed the video since it was shared.
     notFound();
   }
-  return <WatchExperience detail={detail} />;
+  return <WatchExperience detail={detail} autoplay={play === "1"} />;
 }
