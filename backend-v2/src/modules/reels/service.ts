@@ -19,7 +19,7 @@
 import { all, get } from "../../db/client.ts";
 import { followedIds, hiddenReelIds, isFollowing, likedReels, reelLikeCounts } from "../community/follows-service.ts";
 import { threadSummaries } from "../community/comments-service.ts";
-import { reelCategoryLabel, reelFeedWeight, type ReelCategoryId } from "./category.ts";
+import { reelCategoryLabel, reelFeedWeight, isReelLength, type ReelCategoryId } from "./category.ts";
 import { videoCatalogue, type VideoCard, type VideoSort } from "../video/service.ts";
 import { regionName } from "../youtube/whitelist.ts";
 
@@ -143,6 +143,7 @@ export function listReels(query: ReelQuery = {}, viewerId: string | null = null)
   const sort: VideoSort = "newest";
 
   const catalogue = videoCatalogue(sort)
+    .filter((card) => isReelLength(card.durationSeconds))
     .filter((card) => !hidden.has(card.videoId))
     .map((card) => {
       const stored = storedReelCategory(card.videoId);
@@ -214,7 +215,7 @@ export function listReels(query: ReelQuery = {}, viewerId: string | null = null)
  * reel was dead. The catalogue itself is unpaginated, so the lookup goes there.
  */
 export function findReel(videoId: string, viewerId: string | null): ReelCard | null {
-  const card = videoCatalogue("newest").find((entry) => entry.videoId === videoId);
+  const card = videoCatalogue("newest").find((entry) => entry.videoId === videoId && isReelLength(entry.durationSeconds));
   if (!card) return null;
   return reelCardFrom(card, viewerId, shareCounts([videoId]).get(videoId) ?? 0);
 }
@@ -253,7 +254,7 @@ export function moreFromChannel(
   limit = 8,
 ): ReelCard[] {
   return videoCatalogue("newest")
-    .filter((card) => card.channel === channel && card.videoId !== excludeVideoId)
+    .filter((card) => card.channel === channel && card.videoId !== excludeVideoId && isReelLength(card.durationSeconds))
     .slice(0, limit)
     .map((card) => reelCardFrom(card, viewerId, 0));
 }
@@ -286,6 +287,6 @@ export function reelFacets(viewerId: string | null = null): {
 
 function catalogueForFacets(hidden: Set<string>): { card: VideoCard; category: ReelCategoryId }[] {
   return videoCatalogue("newest")
-    .filter((card) => !hidden.has(card.videoId))
+    .filter((card) => !hidden.has(card.videoId) && isReelLength(card.durationSeconds))
     .map((card) => ({ card, category: storedReelCategory(card.videoId).category ?? (card.category as ReelCategoryId) }));
 }

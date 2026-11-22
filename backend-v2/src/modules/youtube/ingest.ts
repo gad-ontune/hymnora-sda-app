@@ -29,6 +29,7 @@ import {
   type YouTubeVideo,
 } from "./client.ts";
 import { classify, normalizeText, type Classification, type MusicCategory } from "./classify.ts";
+import { REEL_MAX_SECONDS, isReelLength } from "../reels/category.ts";
 
 export type IngestSummary = {
   ranAt: string;
@@ -237,7 +238,6 @@ function persistVerdict(
 
 /** Duration gates, in seconds. */
 const SONG_MAX_SECONDS = 600; // 10 minutes
-const REEL_MAX_SECONDS = 180; // 3 minutes
 
 /** Per-channel overrides, keyed by YouTube channel id. */
 type Route = "tracks" | "sermons" | "videos" | "reels";
@@ -288,7 +288,7 @@ function isShort(video: YouTubeVideo): boolean {
  *
  *   - Over ten minutes is never a song. A sermon-length upload is a sermon or a
  *     watchable video, not a track on a listening page.
- *   - Under three minutes is a reel: a clip, not a piece of music.
+ *   - Four minutes or less is a reel: a clip, not a piece of music.
  *   - Between the two is a song, if the classifier says it is music.
  *
  * A missing duration falls through to the classifier rather than being guessed
@@ -310,7 +310,7 @@ function routeVideo(
   if (duration > SONG_MAX_SECONDS) {
     return decision.verdict === "sermon" ? "sermons" : "videos";
   }
-  if (duration > 0 && duration < REEL_MAX_SECONDS) {
+  if (isReelLength(duration)) {
     return "reels";
   }
   if (decision.verdict === "music") return "tracks";

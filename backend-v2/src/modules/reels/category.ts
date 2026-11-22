@@ -58,6 +58,24 @@ export type ReelCategory = {
 };
 
 /**
+ * The longest clip the reels feed will serve, in seconds.
+ *
+ * Reels are watched in one sitting, so the shelf has a ceiling: four minutes.
+ * It lives here rather than in the ingest module because it is now a rule about
+ * the feed, not only about how a new upload is routed — an existing row that is
+ * longer must not leak into the feed just because it was classified before the
+ * rule existed.
+ *
+ * A duration of zero means the API never told us the length. Those are excluded
+ * too: "probably short" is not a promise this shelf can keep.
+ */
+export const REEL_MAX_SECONDS = 240;
+
+export function isReelLength(durationSeconds: number): boolean {
+  return durationSeconds > 0 && durationSeconds <= REEL_MAX_SECONDS;
+}
+
+/**
  * The chips, in order. `for-you` leads because it is what the feed opens on,
  * and it is marked `mixed` because nothing is ever classified into it — it is
  * the absence of a classification, not one.

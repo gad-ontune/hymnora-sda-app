@@ -31,6 +31,8 @@ export type VideoCard = {
   thumbnail: string;
   /** `mm:ss` or `h:mm:ss`, already formatted. */
   duration: string;
+  /** The raw length in seconds, for rules that must not parse the label. */
+  durationSeconds: number;
   views: number;
   likes: number;
   publishedAt: string;
@@ -156,6 +158,7 @@ function toCard(row: Record<string, unknown>): VideoCard {
     channel: String(row.channel ?? ""),
     thumbnail: String(row.thumbnail ?? ""),
     duration: formatSeconds(Number(row.duration ?? 0)),
+    durationSeconds: Number(row.duration ?? 0),
     views: Number(row.views ?? 0),
     likes: Number(row.likes ?? 0),
     publishedAt: String(row.publishedAt ?? ""),

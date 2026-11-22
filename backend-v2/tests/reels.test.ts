@@ -16,6 +16,8 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   classifyReelCategory,
+  isReelLength,
+  REEL_MAX_SECONDS,
   reelCategories,
   reelCategory,
   reelCategoryIds,
@@ -137,6 +139,25 @@ describe("description and tags count as evidence", () => {
 
   it("reads IETF tags", () => {
     assert.equal(classifyReelCategory({ title: "Upload 3", tags: ["youth-orchestra"] }).category, "youth");
+  });
+});
+
+describe("the four-minute ceiling", () => {
+  it("accepts a clip of four minutes exactly, and anything shorter", () => {
+    assert.equal(isReelLength(REEL_MAX_SECONDS), true);
+    assert.equal(isReelLength(240), true);
+    assert.equal(isReelLength(59), true);
+  });
+
+  it("rejects anything longer than four minutes", () => {
+    assert.equal(isReelLength(REEL_MAX_SECONDS + 1), false);
+    assert.equal(isReelLength(600), false);
+    assert.equal(isReelLength(3600), false);
+  });
+
+  it("rejects an unknown duration rather than guessing it is short", () => {
+    assert.equal(isReelLength(0), false);
+    assert.equal(isReelLength(-1), false);
   });
 });
 
