@@ -26,6 +26,7 @@ import {
   X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { useHymnora } from "./hymnora-provider";
 import { MiniPlayer } from "./mini-player";
 import { AccountCard, AccountMenu } from "./account-menu";
 import { RemindersModal } from "./reminders-modal";
@@ -79,10 +80,23 @@ const moreNav: NavItem[] = [
 /** Pages that render without the shell's furniture. */
 const AUTH_ROUTES = ["/signin", "/register", "/forgot-password", "/reset-password", "/policies"];
 
+/**
+ * Which surface is holding the audio focus. Reels and the watch page play
+ * their own sound, so the music stream is paused for as long as one of them is
+ * open and picked up again on the way out. Both reels sub-pages share an owner:
+ * moving from the feed to the studio is not a video stopping and starting.
+ */
+function videoOwnerFor(pathname: string): string | null {
+  if (pathname === "/reels" || pathname.startsWith("/reels/")) return "reels";
+  if (pathname.startsWith("/videos/")) return "watch";
+  return null;
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { t } = useI18n();
+  const { suspendForVideo, resumeFromVideo } = useHymnora();
   const [menuPath, setMenuPath] = useState<string | null>(null);
   const menuOpen = menuPath === pathname;
   const [remindersOpen, setRemindersOpen] = useState(false);
@@ -105,6 +119,28 @@ export function AppShell({ children }: { children: React.ReactNode }) {
    * and its own bottom bar, and the shell gets out of the way.
    */
   const immersive = pathname === "/reels" || pathname.startsWith("/reels/");
+
+  // ─── Audio handoff ──────────────────────────────────────────────────────────
+  // Route changes are the one reliable signal for "a video owns the sound now".
+  // Doing it here, rather than in each player, means an unmount caused by a
+  // redirect cannot strand the music in a paused state.
+  const videoOwner = videoOwnerFor(pathname);
+  const previousVideoOwner = useRef<string | null>(null);
+  useEffect(() => {
+    const previous = previousVideoOwner.current;
+    if (videoOwner && previous && previous !== videoOwner) {
+      // Moving from one video surface to another: take the new claim BEFORE
+      // releasing the old one. The provider resumes only when the last claim
+      // goes away, so the music never starts for a frame between two videos.
+      suspendForVideo(videoOwner);
+      resumeFromVideo(previous);
+    } else if (previous && previous !== videoOwner) {
+      resumeFromVideo(previous);
+    } else if (videoOwner) {
+      suspendForVideo(videoOwner);
+    }
+    previousVideoOwner.current = videoOwner;
+  }, [videoOwner, resumeFromVideo, suspendForVideo]);
 
   /**
    * Signing in is the one page that should look like nothing else.
@@ -148,10 +184,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <>
         {children}
         {/*
-          The mini-player is not merely hidden here, it is stopped: `stop` is an
-          effect inside the player rather than a CSS rule, so leaving it running
-          would keep a second audio stream alive behind the feed and, on a phone,
-          fight the reel for the audio focus YouTube needs to play at all.
+          Hidden, not stopped: the shell has already paused the music through
+          the provider and will resume it on the way out. Hiding the bar keeps a
+          second set of transport controls off the full-bleed feed.
         */}
         <MiniPlayer pathname={pathname} suspended={immersive} />
       </>

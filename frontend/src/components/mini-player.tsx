@@ -47,13 +47,12 @@ const SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2];
  * the player hides there rather than competing for the same attention.
  */
 /**
- * `suspended` is for a surface that owns the audio itself — the reels page,
- * where the video is the player. It is stronger than hiding: the stream is
- * stopped, because a bar that is merely invisible is still a second player
- * holding audio focus behind a full-screen video.
+ * `suspended` is for a surface that owns the sound — the reels page or the
+ * watch page. It only hides the bar: pausing and resuming the stream is the
+ * provider's job, so the handoff survives this component unmounting.
  */
 export function MiniPlayer({ pathname, suspended = false }: { pathname: string; suspended?: boolean }) {
-  const { startedAt, togglePlay, stopPlayback } = useHymnora();
+  const { startedAt, togglePlay } = useHymnora();
   const [expanded, setExpanded] = useState(false);
   const [docked, setDocked] = useState(false);
   const [sleepUntil, setSleepUntil] = useState<number | null>(null);
@@ -63,10 +62,6 @@ export function MiniPlayer({ pathname, suspended = false }: { pathname: string; 
   // Derived, not stored. `startedAt` rather than "a track is loaded", so a
   // prefetched track never puts a bar on screen uninvited.
   const visible = startedAt > 0 && !quiet && !suspended;
-
-  useEffect(() => {
-    if (suspended && startedAt > 0) stopPlayback();
-  }, [suspended, startedAt, stopPlayback]);
 
   // Leaving the page with the bar docked would otherwise drop a 56px square into
   // the corner of a page that never asked for it.

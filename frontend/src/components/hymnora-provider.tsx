@@ -70,6 +70,15 @@ type HymnoraContextValue = {
    * fighting for audio focus, and where the bar must not come back on its own.
    */
   stopPlayback: () => void;
+  /**
+   * Pauses the stream while a video surface owns the sound, without withdrawing
+   * the player or forgetting the track. Several surfaces can hold a claim at
+   * once (a watch page opening over reels, for example); the last one to let go
+   * is the one that gives the audio back.
+   */
+  suspendForVideo: (owner: string) => void;
+  /** Releases a claim and resumes only if the audio was playing before it. */
+  resumeFromVideo: (owner: string) => void;
 };
 
 const HymnoraContext = createContext<HymnoraContextValue | null>(null);
@@ -127,11 +136,19 @@ export function HymnoraProvider({ children }: { children: React.ReactNode }) {
    */
   const stoppedRef = useRef(false);
   const positionRef = useRef(0);
+  /** Routes currently holding the audio focus — see `suspendForVideo`. */
+  const suspendedByRef = useRef<Set<string>>(new Set());
+  /** Whether the stream was actually playing when the first claim arrived. */
+  const resumeAfterVideoRef = useRef(false);
+  const isPlayingRef = useRef(false);
+  const startedAtRef = useRef(0);
 
   useEffect(() => {
     queueRef.current = queue;
     trackRef.current = currentTrack;
     positionRef.current = position;
+    isPlayingRef.current = isPlaying;
+    startedAtRef.current = startedAt;
   });
 
   // ─── Loading and advancing ──────────────────────────────────────────────────
@@ -196,9 +213,15 @@ export function HymnoraProvider({ children }: { children: React.ReactNode }) {
   // Built once, on mount.
 
   useEffect(() => {
-    const element = mountRef.current;
-    if (!element) return;
+    const host = mountRef.current;
+    if (!host) return;
     let disposed = false;
+
+    // As on the reels page: the IFrame API replaces the element it is given
+    // with an iframe, so hand it a node React does not own. React keeps the
+    // host, and destroying the player can never strand a child it manages.
+    const element = document.createElement("div");
+    host.replaceChildren(element);
 
     void loadYouTubeApi()
       .then((YT) => {
@@ -254,6 +277,7 @@ export function HymnoraProvider({ children }: { children: React.ReactNode }) {
       }
       playerRef.current = null;
       loadedIdRef.current = null;
+      host.replaceChildren();
     };
   }, [advance, load]);
 
@@ -342,7 +366,61 @@ export function HymnoraProvider({ children }: { children: React.ReactNode }) {
     // Zero, not "now": this is a withdrawal, not a new start, so the bar stays
     // gone until the reader deliberately plays again from anywhere.
     setStartedAt(0);
+    // A deliberate close also cancels any pending handoff: nobody expects music
+    // to come back after they pressed the X, even if a video is still on screen.
+    suspendedByRef.current.clear();
+    resumeAfterVideoRef.current = false;
   }, []);
+
+  /**
+   * A video page takes the audio focus by *pausing*, not by stopping. Stopping
+   * would throw away the track and the listening position, which is exactly what
+   * someone leaving a reel expects to find waiting for them.
+   *
+   * `startedAt` deliberately stays put: the mini-player is hidden by the shell
+   * while the claim is held, and comes back with the same track on exit.
+   */
+  const suspendForVideo = useCallback((owner: string) => {
+    const first = suspendedByRef.current.size === 0;
+    suspendedByRef.current.add(owner);
+    if (!first) return;
+
+    const player = playerRef.current;
+    let wasPlaying = isPlayingRef.current;
+    if (player) {
+      try {
+        wasPlaying = player.getPlayerState() === YT_STATE.PLAYING;
+      } catch {
+        /* A stub player has no state; the mirrored flag is the fallback. */
+      }
+    }
+    resumeAfterVideoRef.current = wasPlaying && startedAtRef.current > 0 && !stoppedRef.current;
+    if (player && wasPlaying) {
+      try {
+        player.pauseVideo();
+      } catch {
+        /* Nothing to pause; the state below is what matters. */
+      }
+    }
+    setIsPlaying(false);
+  }, []);
+
+  const resumeFromVideo = useCallback(
+    (owner: string) => {
+      suspendedByRef.current.delete(owner);
+      if (suspendedByRef.current.size > 0) return;
+
+      const shouldResume = resumeAfterVideoRef.current;
+      resumeAfterVideoRef.current = false;
+      if (!shouldResume || !trackRef.current || startedAtRef.current === 0 || stoppedRef.current) return;
+
+      // The player may still be booting; `load` remembers a pending track and
+      // starts it as soon as the iframe reports ready.
+      if (!playerRef.current) setStatus("loading");
+      load(trackRef.current, true);
+    },
+    [load],
+  );
 
   const togglePlay = useCallback(() => {
     const player = playerRef.current;
@@ -439,6 +517,8 @@ export function HymnoraProvider({ children }: { children: React.ReactNode }) {
       playTracks,
       togglePlay,
       stopPlayback,
+      suspendForVideo,
+      resumeFromVideo,
       playNext,
       playPrevious,
       seek,
@@ -474,6 +554,8 @@ export function HymnoraProvider({ children }: { children: React.ReactNode }) {
       startedAt,
       status,
       stopPlayback,
+      suspendForVideo,
+      resumeFromVideo,
       toggleFavorite,
       togglePlay,
       volume,
