@@ -6,6 +6,7 @@ import {
   CalendarDays,
   CheckCircle2,
   ChevronRight,
+  Clock3,
   Globe2,
   Locate,
   Loader2,
@@ -13,7 +14,9 @@ import {
   Navigation,
   Phone,
   Radio,
+  RotateCcw,
   Search,
+  TriangleAlert,
   UsersRound,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -53,18 +56,39 @@ function serviceTimeLabel(slot: string | ServiceTime | undefined): string | null
   return [slot.day, slot.time].filter(Boolean).join(" · ") || slot.name;
 }
 
+/**
+ * The directory payload has no region column; its `location` field is
+ * "Town, Country". The first part is the area a reader recognises, so the
+ * region chips are derived from the data already fetched rather than adding a
+ * second request.
+ */
+function regionOf(church: Church): string {
+  return church.location.split(",")[0]?.trim() || "Unlisted";
+}
+
+/** Stable empty reference so memoized filters do not churn before data arrives. */
+const NO_CHURCHES: Church[] = [];
+
 export function ChurchExperience() {
   const [query, setQuery] = useState("");
   const [view, setView] = useState<"list" | "map">("map");
   const [radiusKm, setRadiusKm] = useState<RadiusKm>(DEFAULT_RADIUS_KM);
+  const [region, setRegion] = useState("all");
+  const [reloadKey, setReloadKey] = useState(0);
+  /**
+   * Results carry the key of the attempt that produced them. Loading and error
+   * are then derived while rendering, so no effect has to reset a flag before
+   * a request starts (which would cause a cascading render).
+   */
+  const [directoryResult, setDirectoryResult] = useState<{ key: number; items: Church[]; error: boolean } | null>(null);
 
   /** The centre the search runs from: the reader's position once shared. */
   const [myLocation, setMyLocation] = useState<LatLng | null>(null);
   const [locating, setLocating] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
 
-  const [nearbyResult, setNearbyResult] = useState<{ key: string; found: Church[] } | null>(null);
-  const [allChurches, setAllChurches] = useState<Church[]>([]);
+  const [nearbyResult, setNearbyResult] = useState<{ key: string; found: Church[]; error: boolean } | null>(null);
+  const [nearbyRetry, setNearbyRetry] = useState(0);
   const [liveChurches, setLiveChurches] = useState<Church[]>([]);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [selected, setSelected] = useState<Church | null>(null);
@@ -75,12 +99,39 @@ export function ChurchExperience() {
   const [now] = useState(() => Date.now());
 
   const centre = myLocation ?? FALLBACK_CENTRE;
+  const allChurches = directoryResult?.items ?? NO_CHURCHES;
+  const directoryLoading = directoryResult?.key !== reloadKey;
+  const directoryError = directoryResult?.key === reloadKey && directoryResult.error;
 
   useEffect(() => {
-    getChurchesData().then(setAllChurches).catch(() => setAllChurches([]));
-    getLiveChurchesData().then(setLiveChurches).catch(() => setLiveChurches([]));
-    getEventsData().then(setEvents).catch(() => setEvents([]));
-  }, []);
+    let cancelled = false;
+    getChurchesData()
+      .then((items) => {
+        if (cancelled) return;
+        setDirectoryResult({ key: reloadKey, items, error: false });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setDirectoryResult({ key: reloadKey, items: [], error: true });
+      });
+    getLiveChurchesData()
+      .then((items) => {
+        if (!cancelled) setLiveChurches(items);
+      })
+      .catch(() => {
+        if (!cancelled) setLiveChurches([]);
+      });
+    getEventsData()
+      .then((items) => {
+        if (!cancelled) setEvents(items);
+      })
+      .catch(() => {
+        if (!cancelled) setEvents([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
 
   /**
    * The radius search, re-run whenever the range or the position changes.
@@ -91,43 +142,51 @@ export function ChurchExperience() {
    * fetch resolves, and a failed fetch resolves to an empty list for that key.
    */
   const nearbyKey = myLocation ? `${myLocation.lat}:${myLocation.lng}:${radiusKm}` : null;
+  // Including the retry in the key makes a retry visibly "in flight" again.
+  const searchKey = nearbyKey ? `${nearbyKey}:${nearbyRetry}` : null;
 
   useEffect(() => {
-    if (!myLocation) return;
-    const key = nearbyKey;
-    if (!key) return;
+    if (!myLocation || !nearbyKey || !searchKey) return;
     let cancelled = false;
     getNearbyChurchesData(myLocation.lat, myLocation.lng, radiusKm)
       .then((found) => {
         if (cancelled) return;
-        setNearbyResult({ key, found });
+        setNearbyResult({ key: searchKey, found, error: false });
         // Keep a selection across range changes: widening should not silently
         // throw away the church somebody had open.
         setSelected((current) => (current && found.some((c) => c.id === current.id) ? current : found[0] ?? null));
       })
       .catch(() => {
-        if (!cancelled) setNearbyResult({ key, found: [] });
+        if (cancelled) return;
+        setNearbyResult({ key: searchKey, found: [], error: true });
       });
     return () => {
       cancelled = true;
     };
-  }, [myLocation, radiusKm, nearbyKey]);
+  }, [myLocation, radiusKm, nearbyKey, searchKey]);
 
   // While a new search is in flight the previous list stays on screen, dimmed,
   // rather than collapsing to nothing. Memoized so the reference is stable for
   // the `shown` filter below.
   const nearby = useMemo(() => (nearbyKey ? (nearbyResult?.found ?? []) : []), [nearbyKey, nearbyResult]);
-  const loading = Boolean(nearbyKey) && nearbyResult?.key !== nearbyKey;
+  const loading = Boolean(searchKey) && nearbyResult?.key !== searchKey;
+  const nearbyFailed = Boolean(searchKey) && nearbyResult?.key === searchKey && nearbyResult.error;
+
+  const regions = useMemo(() => {
+    const labels = new Set(allChurches.map(regionOf).filter((label) => label !== "Unlisted"));
+    return ["all", ...Array.from(labels).sort((a, b) => a.localeCompare(b))];
+  }, [allChurches]);
 
   /** The churches the map is plotting and the card is listing. */
   const shown = useMemo(() => {
     const base = myLocation ? nearby : allChurches;
+    const inRegion = region === "all" ? base : base.filter((church) => regionOf(church) === region);
     const normalized = query.trim().toLowerCase();
-    if (!normalized) return base;
-    return base.filter((church) =>
+    if (!normalized) return inRegion;
+    return inRegion.filter((church) =>
       `${church.name} ${church.location} ${church.service}`.toLowerCase().includes(normalized),
     );
-  }, [allChurches, myLocation, nearby, query]);
+  }, [allChurches, myLocation, nearby, query, region]);
 
   const activeChurch = useMemo(
     () => shown.find((church) => church.id === selected?.id) ?? shown[0] ?? null,
@@ -188,6 +247,7 @@ export function ChurchExperience() {
   );
 
   const newActivities = useMemo(() => events.filter((event) => isThisWeek(event.startsAt, now)).length, [events, now]);
+  const upcomingEvents = useMemo(() => events.filter((event) => isThisWeek(event.startsAt, now)).slice(0, 3), [events, now]);
 
   return (
     <div className="fade-up mx-auto max-w-[1440px]">
@@ -242,7 +302,7 @@ export function ChurchExperience() {
           {/* Three real numbers: the radius result, the live flag, the calendar. */}
           <div className="mt-7 grid grid-cols-3 gap-2 sm:gap-3">
             <Metric
-              value={myLocation ? String(shown.length) : String(allChurches.length)}
+              value={myLocation ? String(shown.length) : directoryLoading || directoryError ? "—" : String(allChurches.length)}
               label={myLocation ? `Within ${radiusKm} km` : "Churches listed"}
             />
             <Metric value={String(liveChurches.length || liveThisWeek)} label="Live this week" />
@@ -257,31 +317,34 @@ export function ChurchExperience() {
         </div>
       </section>
 
-      {/* The range control: the map reframes to whichever is chosen. */}
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div
-          className="flex flex-wrap items-center gap-2"
-          role="radiogroup"
-          aria-label="Search radius"
-        >
-          <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-ink-muted">Within</span>
-          {RADIUS_CHOICES.map((km) => (
-            <button
-              key={km}
-              type="button"
-              role="radio"
-              aria-checked={radiusKm === km}
-              onClick={() => setRadiusKm(km)}
-              className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-                radiusKm === km ? "bg-ink-fill text-white" : "border border-line bg-surface text-ink-muted hover:border-sage/50"
-              }`}
-            >
-              {km} km
-            </button>
-          ))}
-          {!myLocation ? (
-            <span className="text-xs text-ink-muted">Share a location to search by distance.</span>
-          ) : null}
+      {/* The slider steps through exactly the radii the nearby API accepts. */}
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-ink-muted">Within</span>
+            <input
+              type="range"
+              min={RADIUS_CHOICES[0]}
+              max={RADIUS_CHOICES[RADIUS_CHOICES.length - 1]}
+              step={1}
+              value={radiusKm}
+              onChange={(event) => {
+                const next = RADIUS_CHOICES.find((km) => km === Number(event.target.value));
+                if (next !== undefined) setRadiusKm(next);
+              }}
+              aria-label="Search radius in kilometres"
+              className="h-1.5 w-36 cursor-pointer appearance-none rounded-full bg-surface-soft accent-sage sm:w-44"
+            />
+            <span className="w-12 text-sm font-bold tabular-nums text-ink">{radiusKm} km</span>
+            {!myLocation ? (
+              <span className="text-xs text-ink-muted">Share a location to search by distance.</span>
+            ) : null}
+          </div>
+          <div className="mt-1.5 flex gap-5 pl-[3.7rem] text-[10px] font-semibold text-ink-muted">
+            {RADIUS_CHOICES.map((km) => (
+              <span key={km}>{km} km</span>
+            ))}
+          </div>
         </div>
 
         <label className="relative block sm:w-72">
@@ -293,6 +356,29 @@ export function ChurchExperience() {
             className="h-10 w-full rounded-xl border border-line bg-surface pl-10 pr-3 text-sm outline-none focus:border-gold/60 focus:ring-4 focus:ring-gold/10"
           />
         </label>
+      </div>
+
+      {/* Area chips are derived from the directory itself, so they stay honest. */}
+      <div className="mb-5 flex flex-wrap items-center gap-2" role="group" aria-label="Filter by region">
+        <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-ink-muted">Region</span>
+        {regions.map((label) => {
+          const active = region === label;
+          return (
+            <button
+              key={label}
+              type="button"
+              aria-pressed={active}
+              onClick={() => setRegion(label)}
+              className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
+                active
+                  ? "bg-sage text-white shadow-soft"
+                  : "border border-line bg-surface text-ink-muted hover:border-sage/50 hover:text-ink"
+              }`}
+            >
+              {label === "all" ? "All regions" : label}
+            </button>
+          );
+        })}
       </div>
 
       <div className="mb-5 flex items-center justify-between gap-3">
@@ -337,10 +423,41 @@ export function ChurchExperience() {
           ) : null}
 
           <div className={view === "map" ? "mt-4 space-y-3" : "space-y-3"}>
-            {loading && myLocation ? (
-              <p className="rounded-[22px] border border-dashed border-line bg-surface p-8 text-center text-sm text-ink-muted">
-                Looking within {radiusKm} km…
-              </p>
+            {nearbyFailed && myLocation ? (
+              <NoticeCard
+                icon="error"
+                title="Nearby search unavailable"
+                message="We could not check churches around you just now. Your location is still saved — try the search again."
+                actionLabel="Try again"
+                onAction={() => setNearbyRetry((value) => value + 1)}
+              />
+            ) : loading && myLocation ? (
+              <NoticeCard
+                loading
+                title="Looking nearby…"
+                message={`Checking churches within ${radiusKm} km of you.`}
+              />
+            ) : directoryLoading && !myLocation ? (
+              <div className="space-y-3" aria-label="Loading churches" aria-busy="true">
+                {[0, 1, 2].map((index) => (
+                  <div key={index} className="flex animate-pulse gap-4 rounded-[22px] border border-line bg-surface p-5">
+                    <div className="size-24 shrink-0 rounded-2xl bg-surface-soft" />
+                    <div className="flex-1 space-y-3 py-1">
+                      <div className="h-4 w-2/3 rounded bg-surface-soft" />
+                      <div className="h-3 w-1/2 rounded bg-surface-soft" />
+                      <div className="h-3 w-1/3 rounded bg-surface-soft" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : directoryError && !myLocation ? (
+              <NoticeCard
+                icon="error"
+                title="The directory did not load"
+                message="The church list could not be read. Nothing else on the page has changed — please try once more."
+                actionLabel="Try again"
+                onAction={() => setReloadKey((value) => value + 1)}
+              />
             ) : shown.length ? (
               shown.map((church) => (
                 <ChurchCard
@@ -351,11 +468,15 @@ export function ChurchExperience() {
                 />
               ))
             ) : (
-              <p className="rounded-[22px] border border-dashed border-line bg-surface p-8 text-center text-sm text-ink-muted">
-                {myLocation
-                  ? `No verified church within ${radiusKm} km of you. Try a wider range.`
-                  : "No churches match that search yet."}
-              </p>
+              <NoticeCard
+                icon="empty"
+                title={myLocation ? "No churches in range" : region !== "all" ? `No churches in ${region}` : "No churches match that search"}
+                message={
+                  myLocation
+                    ? `No verified church within ${radiusKm} km of you. Try a wider range or clear your filters.`
+                    : "Try another region or a shorter search term."
+                }
+              />
             )}
           </div>
         </div>
@@ -368,6 +489,7 @@ export function ChurchExperience() {
                   src={imgSrc(activeChurch.image, "/images/church.jpg")}
                   alt=""
                   fill
+                  priority
                   sizes="(max-width: 1280px) 100vw, 40vw"
                   className="object-cover warm-image"
                 />
@@ -459,6 +581,91 @@ export function ChurchExperience() {
 
       <section className="mt-12">
         <SectionHeading
+          eyebrow="Around the network"
+          title="Gatherings worth knowing about."
+          description="Live worship and the next seven days of activities, drawn from the same directory."
+        />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="rounded-[24px] border border-line bg-surface p-5 shadow-soft sm:p-6">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-terracotta">Live this week</p>
+                <h3 className="mt-1 font-display text-xl font-semibold tracking-[-0.02em] text-ink">
+                  Where worship is gathering
+                </h3>
+              </div>
+              <span className="rounded-full bg-terracotta-soft px-3 py-1.5 text-xs font-bold text-terracotta">
+                {liveChurches.length || liveThisWeek}
+              </span>
+            </div>
+            {liveChurches.length ? (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {liveChurches.slice(0, 6).map((church) => (
+                  <button
+                    key={church.id}
+                    type="button"
+                    onClick={() => {
+                      setRegion("all");
+                      setQuery("");
+                      setSelected(church);
+                      setView("map");
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-line bg-canvas px-3 py-2 text-xs font-semibold text-ink transition hover:border-terracotta/50"
+                  >
+                    <span className="size-1.5 rounded-full bg-terracotta" /> {church.name}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-4 rounded-2xl bg-surface-soft p-4 text-sm leading-6 text-ink-muted">
+                No church is streaming right now. Each church card still shows its next service.
+              </p>
+            )}
+          </div>
+
+          <div className="rounded-[24px] border border-line bg-surface p-5 shadow-soft sm:p-6">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-gold">Next seven days</p>
+                <h3 className="mt-1 font-display text-xl font-semibold tracking-[-0.02em] text-ink">
+                  Upcoming activities
+                </h3>
+              </div>
+              <span className="rounded-full bg-gold-soft px-3 py-1.5 text-xs font-bold text-gold">
+                {upcomingEvents.length}
+              </span>
+            </div>
+            {upcomingEvents.length ? (
+              <ul className="mt-4 divide-y divide-line">
+                {upcomingEvents.map((event) => (
+                  <li key={event.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+                    <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-gold-soft text-center leading-none text-gold">
+                      <span className="text-sm font-bold">{event.day}</span>
+                      <span className="text-[9px] font-bold uppercase">{event.month}</span>
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-ink">{event.title}</p>
+                      <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-ink-muted">
+                        <MapPin size={11} /> {event.place}
+                      </p>
+                    </div>
+                    <span className="flex shrink-0 items-center gap-1 text-xs font-semibold text-ink-muted">
+                      <Clock3 size={12} /> {event.time}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-4 rounded-2xl bg-surface-soft p-4 text-sm leading-6 text-ink-muted">
+                No activities are scheduled in the next seven days. Check back as churches add gatherings.
+              </p>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section className="mt-12">
+        <SectionHeading
           eyebrow="The bigger picture"
           title="A global family, locally present."
           description="Explore the organizations, ministries and conferences that make this community connected."
@@ -537,6 +744,46 @@ function Metric({ value, label }: { value: string; label: string }) {
     <div className="rounded-2xl border border-white/10 bg-white/[0.07] p-3.5 sm:p-4">
       <p className="font-display text-[27px] font-semibold text-gold-light">{value}</p>
       <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-white/52">{label}</p>
+    </div>
+  );
+}
+
+/** One calm card for the list's loading, empty and failed states. */
+function NoticeCard({
+  icon = "empty",
+  loading = false,
+  title,
+  message,
+  actionLabel,
+  onAction,
+}: {
+  icon?: "empty" | "error";
+  loading?: boolean;
+  title: string;
+  message: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
+  return (
+    <div className="rounded-[22px] border border-dashed border-line bg-surface p-8 text-center">
+      <span
+        className={`mx-auto grid size-11 place-items-center rounded-xl ${
+          icon === "error" ? "bg-terracotta-soft text-terracotta" : "bg-sage-soft text-sage"
+        }`}
+      >
+        {loading ? <Loader2 size={18} className="animate-spin" /> : icon === "error" ? <TriangleAlert size={18} /> : <Locate size={18} />}
+      </span>
+      <p className="mt-3 font-display text-lg font-semibold text-ink">{title}</p>
+      <p className="mx-auto mt-1 max-w-sm text-sm leading-6 text-ink-muted">{message}</p>
+      {actionLabel && onAction ? (
+        <button
+          type="button"
+          onClick={onAction}
+          className="mt-4 inline-flex h-10 items-center gap-2 rounded-xl border border-line bg-canvas px-4 text-xs font-bold text-ink transition hover:border-sage/50"
+        >
+          <RotateCcw size={14} /> {actionLabel}
+        </button>
+      ) : null}
     </div>
   );
 }
